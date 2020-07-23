@@ -15,7 +15,7 @@ using SpecialFunctions
 
 """
     gauss_lobatto_quad(p, α=0, β=0)
-Initialize Gauss-Legendre-Lobatto (GLL) quadrature points.
+Initialize nodes and weights (x,w) of Gauss-Legendre-Lobatto (GLL) quadrature points.
 """
 function gauss_lobatto_quad(p, α=0, β=0)
 
@@ -44,8 +44,7 @@ end
 
 """
     gauss_quad(p, α, β)
-Initialize weights and nodes (w,x) of Gaussian quadrature of Jacobi Polynomial
-(α,β)
+Initialize nodes and weights (x,w) of Gaussian quadrature of Jacobi Polynomial (α,β)
 """
 function gauss_quad(p, α, β)
     if p == 0
@@ -81,7 +80,7 @@ end
 
 """
     jacobiP(p, x, α, β)
-Evaluate Jacobi Polynomial (α, β) of order p at x
+Evaluate Jacobi Polynomial (α, β) of order p at points x
 """
 function jacobiP(p, x, α, β)
     xp = x
@@ -143,7 +142,7 @@ end
 
 """
     chebyshev(p)
-Returns the 1D Chebyshev points of order p on [-1,1]
+Returns the 1D Chebyshev nodes of order p on [-1,1]
 """
 function chebyshev(p)
     cheby = cos.((p:-1:0)*π/p)
