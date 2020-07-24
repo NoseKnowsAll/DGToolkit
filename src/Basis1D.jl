@@ -7,7 +7,7 @@ module Basis1D
 
 export gauss_lobatto_quad, gauss_quad
 export jacobiP, grad_jacobiP
-export vandermonde_1D, grad_vandermonde_1D
+export vandermonde1D, grad_vandermonde1D
 export chebyshev
 
 using LinearAlgebra
@@ -46,7 +46,7 @@ end
     gauss_quad(p, α, β)
 Initialize nodes and weights (x,w) of Gaussian quadrature of Jacobi Polynomial (α,β)
 """
-function gauss_quad(p, α, β)
+function gauss_quad(p, α=0, β=0)
     if p == 0
         x = [-(α-β)/(α+β+2)]
         w = [2]
@@ -117,10 +117,10 @@ function jacobiP(p, x, α, β)
 end
 
 """
-    vandermonde_1D(p, r)
+    vandermonde1D(p, r)
 Initialize the 1D Vandermonde matrix of order p Legendre polynomials at nodes r
 """
-function vandermonde_1D(p, r)
+function vandermonde1D(p, r)
     V1D = zeros(length(r), p+1)
     for j = 1:p+1
         V1D[:,j] = jacobiP(j-1, r[:], 0, 0)
@@ -129,10 +129,10 @@ function vandermonde_1D(p, r)
 end
 
 """
-    grad_vandermonde_1D(p, r)
+    grad_vandermonde1D(p, r)
 Initialize the 1D gradient Vandermonde matrix of order p Legendre polynomials at nodes r
 """
-function grad_vandermonde_1D(p, r)
+function grad_vandermonde1D(p, r)
     V1D = zeros(length(r), p+1)
     for j = 1:p+1
         V1D[:,j] = grad_jacobiP(j-1, r[:], 0, 0)
