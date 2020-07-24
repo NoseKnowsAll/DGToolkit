@@ -15,7 +15,7 @@ using SpecialFunctions
 
 """
     gauss_lobatto_quad(p, α=0, β=0)
-Initialize nodes and weights (x,w) of Gauss-Legendre-Lobatto (GLL) quadrature points.
+Initialize nodes and weights (x,w) of order p Gauss-Legendre-Lobatto (GLL) quadrature points.
 """
 function gauss_lobatto_quad(p, α=0, β=0)
 
@@ -44,7 +44,7 @@ end
 
 """
     gauss_quad(p, α, β)
-Initialize nodes and weights (x,w) of Gaussian quadrature of Jacobi Polynomial (α,β)
+Initialize nodes and weights (x,w) of Gaussian quadrature of order p Jacobi Polynomial (α,β)
 """
 function gauss_quad(p, α=0, β=0)
     if p == 0

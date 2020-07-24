@@ -55,7 +55,7 @@ end
 
 """
     gauss_quad2D(p)
-Returns the 2D Gaussian quadrature points and weights (x,w) on the domain [-1,1]^2
+Returns the 2D Gaussian quadrature points and weights (x,w) of order p on the domain [-1,1]^2
 """
 function gauss_quad2D(p)
     (x1D,w1D) = Basis1D.gauss_quad(p)
@@ -74,7 +74,7 @@ end
 
 """
     chebyshev2D(p)
-Returns the 2D chebyshev points on the domain [-1,1]^2
+Returns the 2D chebyshev points of order p on the domain [-1,1]^2
 """
 function chebyshev2D(p)
     x1D = Basis1D.chebyshev(p)
