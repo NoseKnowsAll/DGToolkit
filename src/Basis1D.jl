@@ -14,11 +14,14 @@ using LinearAlgebra
 using SpecialFunctions
 
 """
-    gauss_lobatto_quad(p, α=0, β=0)
-Initialize nodes and weights (x,w) of order p Gauss-Legendre-Lobatto (GLL) quadrature points.
+    gauss_lobatto_quad(degree, α=0, β=0)
+Initialize Gauss-Legendre-Lobatto (GLL) quadrature nodes and weights (x,w)
+to be able to exactly integrate (α,β) Jacobi polynomial of given degree
 """
-function gauss_lobatto_quad(p, α=0, β=0)
-
+function gauss_lobatto_quad(degree, α=0, β=0)
+    # Need n points to integrate polynomials of degree 2n-3
+    n = ceil(Int, (degree+3)/2)
+    p = n-1
     if (α!=0) && (β!=0)
         error("currently only allows alpha == beta == 0")
     end
@@ -33,20 +36,24 @@ function gauss_lobatto_quad(p, α=0, β=0)
         w[1] = 1.0
         w[2] = 1.0
     else
-        xint, w = gauss_quad(p-2, α+1, β+1)
+        xint, w = gauss_quad(2*p-3, α+1, β+1)
         x = [-1 transpose(xint) 1]
 
-        V = vandermonde_1D(p,x)
+        V = vandermonde1D(p,x)
         w = vec(sum(inv(V*V'),dims=2))
     end
     return x[:],w[:]
 end
 
 """
-    gauss_quad(p, α, β)
-Initialize nodes and weights (x,w) of Gaussian quadrature of order p Jacobi Polynomial (α,β)
+    gauss_quad(degree, α, β)
+Initialize Gaussian quadrature nodes and weights (x,w) to be able to exactly
+integrate Jacobi Polynomial (α,β) of given degree
 """
-function gauss_quad(p, α=0, β=0)
+function gauss_quad(degree, α=0, β=0)
+    # Need n points to integrate polynomials of degree 2n-1
+    n = ceil(Int, (degree+1)/2)
+    p = n-1
     if p == 0
         x = [-(α-β)/(α+β+2)]
         w = [2]
