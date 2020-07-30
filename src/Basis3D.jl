@@ -12,7 +12,7 @@ using LinearAlgebra, SparseArrays
 
 """
     vandermonde3D(p, x, y, z)
-Returns the 3D vandermonde matrix - the order 0:p Legendre polynomials
+Return the 3D vandermonde matrix - the order 0:p Legendre polynomials
 evaluated at 3D nodes (x,y,z)
 """
 function vandermonde3D(p, x, y, z)
@@ -38,8 +38,8 @@ end
 
 """
     grad_vandermonde3D(p, x, y, z)
-Returns the gradient of the order 0:p Legendre polynomials
-evaluated at 3D nodes (x,y,z)
+Return the gradient of the order 0:p Legendre polynomials evaluated
+at 3D nodes (x,y,z)
 """
 function grad_vandermonde3D(p, x, y, z)
     dV = Array{Float64,7}(undef, length(x),length(y),length(z), p+1,p+1,p+1, 3)
@@ -96,7 +96,7 @@ end
 
 """
     gauss_quad3D(p)
-Returns the 3D Gaussian quadrature points and weights (x,w) of order p on the domain [-1,1]^3
+Return the 3D Gaussian quadrature points and weights (x,w) of order p on the domain [-1,1]^3
 """
 function gauss_quad3D(p)
     (x1D,w1D) = Basis1D.gauss_quad(p)
@@ -118,7 +118,7 @@ end
 
 """
     chebyshev3D(p)
-Returns the 3D chebyshev points of order p on the domain [-1,1]^3
+Return the 3D chebyshev points of order p on the domain [-1,1]^3
 """
 function chebyshev3D(p)
     x1D = Basis1D.chebyshev(p)
@@ -138,7 +138,7 @@ end
 
 """
     equidistant_nodes3D(p)
-Returns the "order p" 3D points on the domain [-1,1]^3
+Return the "order p" 3D points on the domain [-1,1]^3
 """
 function equidistant_nodes3D(p)
     x1D = -1:2/p:1
@@ -154,6 +154,35 @@ function equidistant_nodes3D(p)
         end
     end
     return x3D
+end
+
+"""
+    interpolation_matrix3D(xyz_from, xyz_to)
+Compute an interpolation matrix from a set of 3D points to another set of 3D points.
+Assumes that points interpolation from provide enough accuracy (aka - they are
+well spaced out and of high enough order), and define a cube. Points
+interpolating onto can be of any size, but must be defined on this same cube.
+Interpolation matrix ∈ ℜ^(3D size of xyz_to x 3D size of xyz_from)
+"""
+function interpolation_matrix3D(xyz_from, xyz_to)
+    # Create nodal representation of reference bases
+    (x_from, y_from, z_from) = xyz_from
+    order = size(x_from,1) - 1 # Assumes order = (size of x_from) - 1
+    @assert size(x_from,1) == size(y_from,1) == size(z_from,1)
+    n_from = size(x_from,1)*size(y_from,1)*size(z_from,1)
+    l_from = vandermonde3D(order, x_from, y_from, z_from)
+
+    eye = diagm(0=>ones(n_from))
+    V = reshape(l_from, n_from,n_from)
+    coeffs_phi = V \ eye
+
+    # Compute reference bases on the output points
+    l_to = vandermonde3D(order, xyz_to...)
+    n_to = prod(size.(xyz_to,1))
+    V_to = reshape(l_to, n_to,n_from)
+
+    # Construct interpolation matrix
+    Interp3D = V_to*coeffs_phi
 end
 
 end

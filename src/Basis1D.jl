@@ -75,7 +75,7 @@ end
 
 """
     grad_jacobiP(p, r, α, β)
-Evaluates the derivative of Jacobi Polynomial (α, β) of order p at nodes r
+Evaluate the derivative of Jacobi Polynomial (α, β) of order p at nodes r
 """
 function grad_jacobiP(p, r, α, β)
     dP = zeros(length(r))
@@ -149,10 +149,37 @@ end
 
 """
     chebyshev(p)
-Returns the 1D Chebyshev nodes of order p on [-1,1]
+Return the 1D Chebyshev nodes of order p on [-1,1]
 """
 function chebyshev(p)
     cheby = cos.((p:-1:0)*π/p)
+end
+
+"""
+    interpolation_matrix1D(x_from, x_to)
+Compute an interpolation matrix from a set of 1D points to another set of 1D points.
+Assumes that points interpolation from provide enough accuracy (aka - they are
+well spaced out and of high enough order), and define an interval. Points
+interpolating onto can be of any size, but must be defined on this same interval.
+Interpolation matrix ∈ ℜ^(size of x_to x size of x_from)
+"""
+function interpolation_matrix1D(x_from, x_to)
+    # Create nodal representation of reference bases
+    order = size(x_from,1) - 1 # Assumes order = (size of x_from) - 1
+    n_from = size(x_from,1)
+    l_from = vandermonde1D(order, x_from)
+
+    eye = diagm(0=>ones(n_from))
+    V = reshape(l_from, n_from,n_from)
+    coeffs_phi = V \ eye
+
+    # Compute reference bases on the output points
+    l_to = vandermonde1D(order, x_to)
+    n_to = size(l_to,1)
+    V_to = reshape(l_to, n_to,n_from)
+
+    # Construct interpolation matrix
+    Interp1D = V_to*coeffs_phi
 end
 
 end
