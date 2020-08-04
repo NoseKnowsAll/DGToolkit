@@ -268,16 +268,21 @@ function init_normals(vertices, f2v, e2v)
 end
 
 """
-    setup_nodes!(mesh::Mesh, InterpTk, order)
-Initialize global nodes in mesh from bilinear mapping of reference nodes
+    setup_nodes!(mesh::Mesh, InterpTk, order; compute_global=false)
+Initialize element nodes within Mesh. If `compute_global`, then also compute
+the global nodes from bilinear mapping of reference nodes and store in
+`coord_nodes`. This would be needed if solutions, for instance, to be stored at
+nodes would be needed to view.
 """
-function setup_nodes!(mesh::Mesh, InterpTk, order)
+function setup_nodes!(mesh::Mesh, InterpTk, order; compute_global=false)
     mesh.order = order
     mesh.n_nodes = size(InterpTk,1)
-    mesh.coord_nodes = Array{Float64,3}(undef, DIM, mesh.n_nodes, mesh.n_elements)
-    for iK = 1:mesh.n_elements
-        for l = 1:DIM
-            mesh.coord_nodes[l,:,iK] = InterpTk*mesh.bilinear_mapping[:,l,iK]
+    if compute_global
+        mesh.coord_nodes = Array{Float64,3}(undef, DIM, mesh.n_nodes, mesh.n_elements)
+        for iK = 1:mesh.n_elements
+            for l = 1:DIM
+                mesh.coord_nodes[l,:,iK] = InterpTk*mesh.bilinear_mapping[:,l,iK]
+            end
         end
     end
 
@@ -285,18 +290,23 @@ function setup_nodes!(mesh::Mesh, InterpTk, order)
 end
 
 """
-    setup_quads!(mesh::Mesh, InterpTkQ, nQV)
-Initialize global quadrature points from bilinear mapping of reference quad points
+    setup_quads!(mesh::Mesh, InterpTkQ; compute_global=false)
+Initialize element quadrature points within Mesh. If `compute_global`, then also
+compute global quadrature points from bilinear mapping of reference quad points
+and store in `coord_quads`. This would be needed if material properties, for instance,
+to be stored at quadrature points would be needed.
 """
-function setup_quads!(mesh::Mesh, InterpTkQ)
+function setup_quads!(mesh::Mesh, InterpTkQ; compute_global=false)
     if mesh.order <= 0
         error("Mesh must setup nodes before quads!")
     end
     nQV = size(InterpTkQ,1)
-    mesh.coord_quads = Array{Float64,3}(undef, DIM, nQV, mesh.n_elements)
-    for iK = 1:mesh.n_elements
-        for l = 1:DIM
-            mesh.coord_quads[l,:,iK] = InterpTkQ*mesh.bilinear_mapping[:,l,iK]
+    if compute_global
+        mesh.coord_quads = Array{Float64,3}(undef, DIM, nQV, mesh.n_elements)
+        for iK = 1:mesh.n_elements
+            for l = 1:DIM
+                mesh.coord_quads[l,:,iK] = InterpTkQ*mesh.bilinear_mapping[:,l,iK]
+            end
         end
     end
 
@@ -347,7 +357,7 @@ function init_face_map!(mesh::Mesh, efmap, nfmap, size1D)
         end
     end
 
-    # nfmap is CW-oriented version of efmap
+    # nfmap is reversed version of efmap
     nfmap = collect(size1D:-1:1)
 
     # Face of 2D mesh is 1D
