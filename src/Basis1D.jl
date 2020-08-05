@@ -9,6 +9,7 @@ export gauss_lobatto_quad, gauss_quad
 export jacobiP, grad_jacobiP
 export vandermonde1D, grad_vandermonde1D
 export chebyshev
+export dPhi1D
 
 using LinearAlgebra
 using SpecialFunctions
@@ -158,7 +159,7 @@ end
 """
     interpolation_matrix1D(x_from, x_to)
 Compute an interpolation matrix from a set of 1D points to another set of 1D points.
-Assumes that points interpolation from provide enough accuracy (aka - they are
+Assumes that points interpolating from provide enough accuracy (aka - they are
 well spaced out and of high enough order), and define an interval. Points
 interpolating onto can be of any size, but must be defined on this same interval.
 Interpolation matrix ∈ ℜ^(size of x_to x size of x_from)
@@ -180,6 +181,39 @@ function interpolation_matrix1D(x_from, x_to)
 
     # Construct interpolation matrix
     Interp1D = V_to*coeffs_phi
+end
+
+"""
+    dPhi1D(x_from, x_to)
+Compute the gradient of the basis functions defined by 1D points on another
+set of 1D points.
+
+Assumes that points interpolating from provide enough accuracy (aka - they are
+well spaced out and of high enough order), and define an interval. Points
+interpolating onto can be of any size, but must be defined on this same interval.
+dPhi ∈ ℜ^(size of x_to × size of x_from × 1)
+"""
+function dPhi1D(x_from, x_to)
+    dim = 1
+    # Create nodal representation of reference bases
+    order = size(x_from,1) - 1 # Assumes order = (size of x_from) - 1
+    n_from = size(x_from,1)
+    l_from = vandermonde1D(order, x_from)
+
+    eye = diagm(0=>ones(n_from))
+    V = reshape(l_from, n_from,n_from)
+    coeffs_phi = V \ eye
+
+    # Compute derivative of reference bases on the output points
+    dl_to = grad_vandermonde1D(order, x_to)
+    n_to = size(dl_to,1)
+    dV = reshape(dl_to, n_to,n_from,dim)
+    # Construct gradient of phi = dV*coeffs_phi
+    dPhi_to = Array{Float64,3}(undef, n_to,n_from,dim)
+    for l = 1:dim
+        dPhi_to[:,:,l] = dV[:,:,l]*coeffs_phi
+    end
+    return dPhi_to
 end
 
 end

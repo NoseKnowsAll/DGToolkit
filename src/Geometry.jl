@@ -5,9 +5,14 @@ All mesh information and setup related to element connectivity
 module Geometry
 
 import LinearAlgebra.norm
+import Basis1D
+import Basis2D.dPhi2D
 
 export Mesh
-export periodic_cube
+export periodic_square
+export setup_nodes!, setup_quads!
+export precompute_jacobians!
+export output_mesh
 
 const DIM = 2
 const N_FACES = 2*DIM
@@ -57,6 +62,8 @@ mutable struct Mesh
     order::Int
     " Local number of DG nodes per element "
     n_nodes::Int
+    " Local number of quadrature points per element "
+    n_quads::Int
     " Local number of DG nodes per element face "
     n_face_nodes::Int
     " Local number of quadrature points per element face "
@@ -74,6 +81,36 @@ mutable struct Mesh
     coordinate of quad point i
     """
     coord_quads
+    """
+    Jacobian of transformation evaluated at each quadrature point, element
+
+    For every element iK, quad point iQ, `Jk[:,:,iQ,iK]` ∈ ℜ^(DIM x DIM)
+    is the Jacobian of the mapping from the reference element to element iK at
+    that quadrature point.
+    """
+    Jk
+    """
+    |det Jacobian| of transformation evaluated each quadrature point, element
+
+    For every element iK, quad point iQ, `Jkdet[iQ,iK]` is |det Jac| of the
+    mapping from the reference element to element iK at quad point iQ.
+    """
+    Jkdet
+    """
+    Jacobian of transformation evaluated at each face quadrature point, element
+
+    For every element iK, face iF, face quad point iQ, `JkF[:,:,iQ,iK]`
+    ∈ ℜ^(DIM x DIM) is the Jacobian of the mapping from the reference face
+    element to face iF of element iK at face quad point iQ
+    """
+    JkF
+    """
+    |det Jacobian| of face integral evaluated at each face quadrature point, element
+
+    For every element iK, face iF, face quad point iQ, `JkFdet[iQ,iF,iK]` is
+    |gamma'(t)| from reference face element to face iF at face quad point iQ.
+    """
+    JkFdet
     """
     Element face to node mapping
 
@@ -109,7 +146,7 @@ mutable struct Mesh
 
     function Mesh(ne_, nv_, mdx_, v_, e2v_, f2v_, e2e_, e2f_, normals_, bm_)
         return new(ne_, nv_, mdx_, v_, e2v_, f2v_, e2e_, e2f_, normals_, bm_,
-            0,0,0,0,[],[],[],[],[],[])
+            0,0,0,0,0,[],[],[],[],[],[],[],[],[],[])
     end
 end
 
@@ -300,9 +337,9 @@ function setup_quads!(mesh::Mesh, InterpTkQ; compute_global=false)
     if mesh.order <= 0
         error("Mesh must setup nodes before quads!")
     end
-    nQV = size(InterpTkQ,1)
+    mesh.n_quads = size(InterpTkQ,1)
     if compute_global
-        mesh.coord_quads = Array{Float64,3}(undef, DIM, nQV, mesh.n_elements)
+        mesh.coord_quads = Array{Float64,3}(undef, DIM, mesh.n_quads, mesh.n_elements)
         for iK = 1:mesh.n_elements
             for l = 1:DIM
                 mesh.coord_quads[l,:,iK] = InterpTkQ*mesh.bilinear_mapping[:,l,iK]
@@ -363,6 +400,98 @@ function init_face_map!(mesh::Mesh, efmap, nfmap, size1D)
     # Face of 2D mesh is 1D
     fnodes = size1D
     return fnodes
+end
+
+"""
+    precompute_jacobians!(mesh::Mesh, xTk1D, xQ1D)
+Precompute Jacobian of mappings from reference element to all elements,
+evaluated at quadrature points.
+
+Depending on the specified flags, will
+initialize mesh.Jk (Jacobians), mesh.Jkdet (|det Jac|), mesh.JkF (face Jacobians),
+and/or mesh.JkFdet(|det face Jac|).
+
+xTk1D is 1D points that bilinear_mapping Tk is defined on
+xQ1D is 1D quadrature points, and assumes faces are xQ1D, while volume is (xQ1D,xQ1D)
+"""
+function precompute_jacobians!(mesh::Mesh, xTk1D, xQ1D)
+    # Compute grad of mapping from reference bases, evaluated on element quad points
+    xyTk = (xTk1D,xTk1D)
+    dPhiTkQ = dPhi2D(xyTk, (xQ1D,xQ1D))
+
+    # Compute grad of mapping from reference bases, evaluated on face quad points
+    n_from = prod(size.(xyTk,1))
+    n_to = size(xQ1D,1) # 1D face
+    dPhiTkQF = Array{Float64,4}(undef, n_to,n_from,DIM,N_FACES)
+    for iF = 1:N_FACES
+        # xyQF = "kronecker product" that represents face quad points on face iF
+        if mesh.f2v[:,iF] == [4,1]
+            # -x direction face
+            xQF = [xTk1D[1]]
+            yQF = reverse(xQ1D)
+        elseif mesh.f2v[:,iF] == [1,2]
+            # -y direction face
+            xQF = xQ1D
+            yQF = [xTk1D[1]]
+        elseif mesh.f2v[:,iF] == [2,3]
+            # +x direction face
+            xQF = [xTk1D[2]]
+            yQF = xQ1D
+        elseif mesh.f2v[:,iF] == [3,4]
+            # +y direction face
+            xQF = reverse(xQ1D)
+            yQF = [xTk1D[2]]
+        else
+            error("Vertices for f2v are not CCW!")
+        end
+        xyQF = (xQF,yQF)
+        dPhiTkQF[:,:,:,iF] = dPhi2D(xyTk, xyQF)
+    end
+
+    # Jacobian = dPhiTkQ[:,:,lj]*bilinear_mapping[:,li,iK]
+    mesh.Jk = Array{Float64,4}(undef, DIM,DIM,mesh.n_quads,mesh.n_elements)
+    mesh.Jkdet = Array{Float64,2}(undef, mesh.n_quads,mesh.n_elements)
+    for iK = 1:mesh.n_elements
+        for li = 1:DIM
+            for lj = 1:DIM
+                mesh.Jk[li,lj,:,iK] = dPhiTkQ[:,:,lj]*mesh.bilinear_mapping[:,li,iK]
+            end
+        end
+        Jac = @view mesh.Jk[:,:,:,iK]
+        mesh.Jkdet[:,iK] = Jac[1,1,:].*Jac[2,2,:].-Jac[2,1,:].*Jac[1,2,:]
+    end
+    # Face Jacobian = dPhiTkQF[:,:,lj,iF]*bilinear_mapping[:,li,iK]
+    mesh.JkF = Array{Float64,5}(undef, DIM,DIM,mesh.n_face_quads,N_FACES,mesh.n_elements)
+    mesh.JkFdet = Array{Float64,3}(undef, mesh.n_face_quads,N_FACES,mesh.n_elements)
+    for iK = 1:mesh.n_elements
+        for iF = 1:N_FACES
+            for li = 1:DIM
+                for lj = 1:DIM
+                    mesh.JkF[li,lj,:,iF,iK] = dPhiTkQF[:,:,lj,iF]*mesh.bilinear_mapping[:,li,iK]
+                end
+            end
+            # 1D integrals => only needs |gamma'(t)| term along correct x_i_{l_i}
+            lj = 0
+            if mesh.f2v[:,iF] == [4,1]
+                # -x direction face
+                lj = 2
+            elseif mesh.f2v[:,iF] == [1,2]
+                # -y direction face
+                lj = 1
+            elseif mesh.f2v[:,iF] == [2,3]
+                # +x direction face
+                lj = 2
+            elseif mesh.f2v[:,iF] == [3,4]
+                # +y direction face
+                lj = 1
+            else
+                error("Vertices for f2v are not CCW!")
+            end
+            for iQ = 1:mesh.n_face_quads
+                mesh.JkFdet[iQ,iF,iK] = norm(mesh.JkF[:,lj,iQ,iF,iK],2)
+            end
+        end
+    end
 end
 
 """

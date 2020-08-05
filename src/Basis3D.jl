@@ -6,6 +6,7 @@ module Basis3D
 
 export vandermonde3D, grad_vandermonde3D
 export chebyshev3D, equidistant_nodes3D, gauss_quad3D
+export dPhi3D
 
 import Basis1D
 using LinearAlgebra, SparseArrays
@@ -159,7 +160,7 @@ end
 """
     interpolation_matrix3D(xyz_from, xyz_to)
 Compute an interpolation matrix from a set of 3D points to another set of 3D points.
-Assumes that points interpolation from provide enough accuracy (aka - they are
+Assumes that points interpolating from provide enough accuracy (aka - they are
 well spaced out and of high enough order), and define a cube. Points
 interpolating onto can be of any size, but must be defined on this same cube.
 Interpolation matrix ∈ ℜ^(3D size of xyz_to x 3D size of xyz_from)
@@ -183,6 +184,41 @@ function interpolation_matrix3D(xyz_from, xyz_to)
 
     # Construct interpolation matrix
     Interp3D = V_to*coeffs_phi
+end
+
+"""
+    dPhi3D(xyz_from, xyz_to)
+Compute the gradient of the basis functions defined by 3D points on another
+set of 3D points.
+
+Assumes that points interpolating from provide enough accuracy (aka - they are
+well spaced out and of high enough order), and define a cube. Points
+interpolating onto can be of any size, but must be defined on this same cube.
+dPhi ∈ ℜ^(size of xyz_to × size of xyz_from × 3)
+"""
+function dPhi3D(xyz_from, xyz_to)
+    dim = 3
+    # Create nodal representation of reference bases
+    (x_from, y_from, z_from) = xyz_from
+    order = size(x_from,1) - 1 # Assumes order = (size of x_from) - 1
+    @assert size(x_from,1) == size(y_from,1) == size(z_from,1)
+    n_from = size(x_from,1)*size(y_from,1)*size(z_from,1)
+    l_from = vandermonde3D(order, x_from, y_from, z_from)
+
+    eye = diagm(0=>ones(n_from))
+    V = reshape(l_from, n_from,n_from)
+    coeffs_phi = V \ eye
+
+    # Compute derivative of reference bases on the output points
+    dl_to = grad_vandermonde3D(order, xyz_to...)
+    n_to = prod(size.(xyz_to,1))
+    dV = reshape(dl_to, n_to,n_from,dim)
+    # Construct gradient of phi = dV*coeffs_phi
+    dPhi_to = Array{Float64,3}(undef, n_to,n_from,dim)
+    for l = 1:dim
+        dPhi_to[:,:,l] = dV[:,:,l]*coeffs_phi
+    end
+    return dPhi_to
 end
 
 end
