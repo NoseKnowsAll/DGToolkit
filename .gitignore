@@ -26,3 +26,6 @@ Manifest.toml
 # All Gmsh mesh/geometry files
 *.msh
 *.geo
+
+# Test scripts
+test*.jl
