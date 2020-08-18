@@ -14,9 +14,13 @@ export setup_nodes!, setup_quads!
 export precompute_jacobians!
 export output_mesh
 
+" Dimension of overall mesh "
 const DIM = 2
+" Number of faces per element "
 const N_FACES = 2*DIM
+" Number of vertices per element "
 const N_VERTICES = 2^DIM
+" Number of vertices per element face "
 const N_FVERTICES = 2^(DIM-1)
 
 """
