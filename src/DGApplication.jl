@@ -93,9 +93,96 @@ is_second_order(app::ConvectionDiffusion) = true
 Computes the convective flux for convection-diffusion equation: f_c(u) = cu
 """
 flux_c!(flux, app::ConvectionDiffusion, u) = (flux .= app.c.*u)
-
 """
     flux_d!(flux, app::ConvectionDiffusion, u, Du)
-Computes the diffusion flux for convection-diffusion equation: f_d(u,∇u)=-d∇u
+Computes the diffusion flux for convection-diffusion equation: f_d(u,∇u)=d∇u
 """
-flux_d!(flux, app::ConvectionDiffusion, u, Du) where {N} = (flux .= -app.d.*Du)
+flux_d!(flux, app::ConvectionDiffusion, u, Du) where {N} = (flux .= app.d.*Du)
+
+
+"""
+    struct NavierStokes{N} <: DGApplication{N}
+Defines the compressible Navier-Stokes equations:
+∂ρ/∂t + ∇⋅(ρu) = 0
+∂(ρu)/∂t + ∇⋅(ρu ⊗ u' + pI - τ) = 0
+∂(ρE)/∂t + ∇⋅((ρE+p)u + q - τu) = 0
+where ρ is the fluid density, u is the fluid velocity, E is the total energy,
+p is the pressure, I is the N × N identity tensor, τ is the viscous stress
+tensor
+τ := μ (∇u + ∇u' - 2/3(∇⋅u)I),
+with μ=1/Re the viscosity coefficient, and q is the heat flux
+q := -μ/Pr ∇(E + p/ρ - 1/2||u||_2^2) = -γ/(Pr*Re) ∇(E+1/2||u||_2^2),
+with Pr the Prandtl number (typically 0.72).
+"""
+struct NavierStokes{N} <: DGApplication{N}
+    # Constants TBD
+    " Reynolds number "
+    Re
+    " Prandtl number "
+    Pr
+    NavierStokes{N}(TODO) where {N} = new{N}(TODO)
+    function NavierStokes{N}(param_dict::Dict{String,Any}) where {N}
+        # TODO - get constants from dictionary
+        Re = param_dict["Re"]
+        Pr = param_dict["Pr"]
+        new{N}(TODO)
+    end
+end
+is_second_order(app::NavierStokes) = true
+nstates(app::NavierStokes{N}) where {N} = N+2
+"""
+    flux_c!(flux, app::NavierStokes{N}, u)
+Computes the convective (inviscid) flux for the Navier-Stokes equations:
+f_c([ρ,ρu,ρE]) = [ρu, ρu⊗u'+pI, (ρE+p)u] ∈ ℜ^(nstates × N)
+"""
+function flux_c!(flux, app::NavierStokes{N}, u) where {N}
+    # TODO: Time with @view in different spots
+    ρ = u[1]
+    ρu = u[2:1+N]
+    ρE = u[2+N]
+    γ = 7/5
+    p = (γ-1)*(ρE-1/2*(ρu'*ρu)/ρ)
+    @views flux[1,:] .= ρu
+    @views flux[2:1+N,:] .= (ρu*ρu')./ρ
+    for i = 1:N
+        flux[1+i,i] += p
+    end
+    @views flux[2+N,:] .= ρu*(ρE+p)./ρ
+end
+"""
+    flux_d!(flux, app::NavierStokes{N}, u, Du)
+Computes the diffusive (viscous) flux for Navier-Stokes equations:
+f_d([ρ,ρu,ρE]) = [0, τ, τu-q] ∈ ℜ^(nstates × N)
+"""
+function flux_d!(flux, app::NavierStokes{N}, u, Du) where {N}
+    # TODO: Time with @view in different spots
+    ρ = u[1]
+    ρu = u[2:1+N]
+    ρE = u[2+N]
+    ∇ρ = Du[1,:]
+    ∇ρu = Du[2:1+N,:]
+    ∇ρE = Du[2+N,:]
+    γ = 7/5
+    u = ρu/ρ
+    ∇u = (∇ρu-∇ρ*u')/ρ
+    ∇E = (∇ρE-∇ρ*(ρE/ρ))/ρ
+
+    @views flux[1,:] .= 0.0
+    # Compute viscous stress tensor τ in-place
+    τ = @view flux[2:1+N,:]
+    τ .= ∇u + ∇u'
+    for i = 1:N
+        @views τ[i,i] -= 2/3 sum(∇u[:,i])
+    end
+    τ ./= app.Re
+    # Compute heat flux
+    q = -γ/app.Pr/app.Re*(∇E-∇u'*u)
+    @views flux[2+N,:] .= τ*u-q
+end
+"""
+    numerical_flux_c!(flux, app::NavierStokes{N}, uK, uN, normal_k) where {N}
+TODO: Roe numerical flux
+"""
+function numerical_flux_c!(flux, app::NavierStokes{N}, uK, uN, normal_k) where {N}
+    # TODO
+end
