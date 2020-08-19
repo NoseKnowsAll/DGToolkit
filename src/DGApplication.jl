@@ -12,6 +12,11 @@ Returns whether the PDE is 2nd order. Default: false => f_d(u,∇u) = 0
 """
 is_second_order(app::DGApplication) = false
 """
+    nstates(app::DGApplication)
+Returns the number of state variables for the given PDE. Default: 1
+"""
+nstates(app::DGApplication) = 1
+"""
     flux_c!(flux, app::DGApplication, u)
 Computes the 1st order, or convective, flux f_c(u) for the given application.
 Default: f_c(u) = 0.0
@@ -31,11 +36,11 @@ store the results in flux. Default: f(uK,uN)*n = upwinding with positive speed
 """
 function numerical_flux_c!(flux, app::DGApplication{N}, uK, uN, normal_k) where {N}
     @assert N == length(normal_k)
-    flux_k = Array{Float64,2}(undef, size(uK,1), N)
+    flux_k = Array{Float64,2}(undef, nstates(app), N)
     flux_c!(flux_k, app, uK)
-    flux_n = Array{Float64,2}(undef, size(uN,1), N)
+    flux_n = Array{Float64,2}(undef, nstates(app), N)
     flux_c!(flux_n, app, uN)
-    flux .= zero(typeof(uK[1]), size(uK,1))
+    flux .= zero(typeof(uK[1]), nstates(app))
     for l=1:N
         @views flux .+= (normal_k[l] > 0.0 ? flux_k[:,l] : flux_n[:,l]).*normal_k[l]
     end
