@@ -1,3 +1,5 @@
+import LinearAlgebra
+
 """
     abstract type DGApplication{N}
 Supertype for applications (PDEs) that specific PDEs can extend. Generalizes
@@ -120,12 +122,12 @@ struct NavierStokes{N} <: DGApplication{N}
     Re
     " Prandtl number "
     Pr
-    NavierStokes{N}(TODO) where {N} = new{N}(TODO)
-    function NavierStokes{N}(param_dict::Dict{String,Any}) where {N}
-        # TODO - get constants from dictionary
+    NavierStokes{N}(Re,Pr) where {N} = new{N}(Re,Pr)
+    function NavierStokes{N}(param_dict::Dict) where {N}
+        # TODO - get all constants from dictionary
         Re = param_dict["Re"]
         Pr = param_dict["Pr"]
-        new{N}(TODO)
+        new{N}(Re, Pr)
     end
 end
 is_second_order(app::NavierStokes) = true
@@ -133,51 +135,53 @@ nstates(app::NavierStokes{N}) where {N} = N+2
 """
     flux_c!(flux, app::NavierStokes{N}, u)
 Computes the convective (inviscid) flux for the Navier-Stokes equations:
-f_c([ρ,ρu,ρE]) = [ρu, ρu⊗u'+pI, (ρE+p)u] ∈ ℜ^(nstates × N)
+f_c([ρ,ρu,ρE]) = [ρu, ρ u⊗u'+pI, (ρE+p)u] ∈ ℜ^(nstates × N)
 """
 function flux_c!(flux, app::NavierStokes{N}, u) where {N}
-    # TODO: Time with @view in different spots
     ρ = u[1]
-    ρu = u[2:1+N]
+    ρu = @view u[2:1+N]
     ρE = u[2+N]
     γ = 7/5
     p = (γ-1)*(ρE-1/2*(ρu'*ρu)/ρ)
-    @views flux[1,:] .= ρu
-    @views flux[2:1+N,:] .= (ρu*ρu')./ρ
+    flux[1,:] .= ρu
+    flux[2:1+N,:] .= (ρu*ρu')./ρ
     for i = 1:N
         flux[1+i,i] += p
     end
-    @views flux[2+N,:] .= ρu*(ρE+p)./ρ
+    flux[2+N,:] .= ρu*(ρE+p)./ρ
+    flux
 end
 """
     flux_d!(flux, app::NavierStokes{N}, u, Du)
 Computes the diffusive (viscous) flux for Navier-Stokes equations:
 f_d([ρ,ρu,ρE]) = [0, τ, τu-q] ∈ ℜ^(nstates × N)
 """
-function flux_d!(flux, app::NavierStokes{N}, u, Du) where {N}
+function flux_d!(flux, app::NavierStokes{N}, state, Dstate) where {N}
     # TODO: Time with @view in different spots
-    ρ = u[1]
-    ρu = u[2:1+N]
-    ρE = u[2+N]
-    ∇ρ = Du[1,:]
-    ∇ρu = Du[2:1+N,:]
-    ∇ρE = Du[2+N,:]
+    ρ = state[1]
+    ρu = @view state[2:1+N]
+    ρE = state[2+N]
+    ∇ρ = @view Dstate[1,:]
+    ∇ρu = @view Dstate[2:1+N,:]
+    ∇ρE = @view Dstate[2+N,:]
     γ = 7/5
     u = ρu/ρ
-    ∇u = (∇ρu-∇ρ*u')/ρ
-    ∇E = (∇ρE-∇ρ*(ρE/ρ))/ρ
+    ∇u = (∇ρu-u*∇ρ')/ρ
+    @views div_u = sum(∇u[LinearAlgebra.diagind(∇u)])
+    ∇E = (∇ρE-(ρE/ρ)*∇ρ)/ρ
 
-    @views flux[1,:] .= 0.0
+    flux[1,:] .= 0.0
     # Compute viscous stress tensor τ in-place
     τ = @view flux[2:1+N,:]
     τ .= ∇u + ∇u'
     for i = 1:N
-        @views τ[i,i] -= 2/3 sum(∇u[:,i])
+        τ[i,i] -= 2/3*div_u
     end
     τ ./= app.Re
     # Compute heat flux
     q = -γ/app.Pr/app.Re*(∇E-∇u'*u)
-    @views flux[2+N,:] .= τ*u-q
+    flux[2+N,:] .= τ*u-q
+    flux
 end
 """
     numerical_flux_c!(flux, app::NavierStokes{N}, uK, uN, normal_k) where {N}
