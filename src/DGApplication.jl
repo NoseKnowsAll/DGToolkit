@@ -167,7 +167,7 @@ function flux_d!(flux, app::NavierStokes{N}, state, Dstate) where {N}
     γ = 7/5
     u = ρu/ρ
     ∇u = (∇ρu-u*∇ρ')/ρ
-    @views div_u = sum(∇u[LinearAlgebra.diagind(∇u)])
+    div_u = sum(∇u[LinearAlgebra.diagind(∇u)])
     ∇E = (∇ρE-(ρE/ρ)*∇ρ)/ρ
 
     flux[1,:] .= 0.0
@@ -178,9 +178,9 @@ function flux_d!(flux, app::NavierStokes{N}, state, Dstate) where {N}
         τ[i,i] -= 2/3*div_u
     end
     τ ./= app.Re
-    # Compute heat flux
-    q = -γ/app.Pr/app.Re*(∇E-∇u'*u)
-    flux[2+N,:] .= τ*u-q
+    # Compute heat flux vector in-place
+    flux[2+N,:] .= γ/app.Pr/app.Re*(∇E-∇u'*u)
+    flux[2+N,:] .+= τ*u
     flux
 end
 """
