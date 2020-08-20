@@ -14,7 +14,8 @@ export
     SolutionVector,
     # Functions
     issymmetric,
-    isdiag
+    isdiag,
+    mul!
     # Operators
     # Constants
 

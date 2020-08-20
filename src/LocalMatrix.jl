@@ -89,7 +89,6 @@ end
 Tests whether a LocalMatrix is symmetric
 """
 function LinearAlgebra.issymmetric(A::LocalMatrix)
-    println("my issymmetric")
     all(LinearAlgebra.issymmetric, [@view A.data[:,:,i,j] for i=1:size(A.data,3), j=1:size(A.data,4)])
 end
 
@@ -98,7 +97,6 @@ end
 Tests whether a LocalMatrix is diagonal
 """
 function LinearAlgebra.isdiag(A::LocalMatrix)
-    println("my isdiag")
     all(LinearAlgebra.isdiag, [@view A.data[:,:,i,j] for i=1:size(A.data,3), j=1:size(A.data,4)])
 end
 
@@ -109,35 +107,83 @@ end
 (*)(c::Number, A::LocalMatrix) = LocalMatrix(c*A.data)
 (*)(A::LocalMatrix, c::Number) = LocalMatrix(c*A.data)
 (/)(A::LocalMatrix, c::Number) = LocalMatrix(A.data / c)
-function (*)(A::LocalMatrix, B::LocalMatrix)
-    println("my *")
-    @assert size(A.data,1) == size(B.data,1) && size(A.data,2) == size(B.data,2) && size(A.data,4) == size(B.data,4)
-    if size(A.data,3) == size(A.data,3)
-        return @inbounds LocalMatrix([A.data[:,:,i,j]*B.data[:,:,i,j] for i=1:size(A.data,3), j=1:size(A.data,4)])
-    elseif size(A.data,3) == 1
-        return @inbounds LocalMatrix([A.data[:,:,1,j]*B.data[:,:,i,j] for i=1:size(B.data,3), j=1:size(A.data,4)])
-    elseif size(B.data,3) == 1
-        return @inbounds LocalMatrix([A.data[:,:,i,j]*B.data[:,:,1,j] for i=1:size(A.data,3), j=1:size(A.data,4)])
+function (*)(A::LocalMatrix{T1}, B::LocalMatrix{T2}) where {T1,T2}
+    (ma,na,nsa,nea) = size(A.data)
+    (mb,nb,nsb,neb) = size(B.data)
+    @assert ma == mb && na == nb && nea == neb
+    data = Array{typeof(zero(T1)*zero(T2)),4}(undef, ma,na,max(nsa,nsb),nea)
+    if nsa == nsb
+        for iS = 1:nsa
+            for iK = 1:nea
+                @inbounds @views data[:,:,iS,iK] = A.data[:,:,iS,iK]*B.data[:,:,iS,iK]
+            end
+        end
+    elseif nsa == 1
+        for iS = 1:nsb
+            for iK = 1:nea
+                @inbounds @views data[:,:,iS,iK] = A.data[:,:,1,iK]*B.data[:,:,iS,iK]
+            end
+        end
+    elseif nsb == 1
+        for iS = 1:nsa
+            for iK = 1:nea
+                @inbounds @views data[:,:,iS,iK] = A.data[:,:,iS,iK]*B.data[:,:,1,iK]
+            end
+        end
     else
         throw(DimensionMismatch("Local matrices A ($(size(A.data))) and B ($(size(B.data)))"))
     end
+    return LocalMatrix(data)
+end
+
+""" Return A B α + C β by overwriting C """
+function LinearAlgebra.mul!(C::LocalMatrix{T3}, A::LocalMatrix{T1}, B::LocalMatrix{T2}, α::Number, β::Number) where {T1,T2,T3}
+    @assert T3 == typeof(zero(T1)*zero(T2))
+    (ma,na,nsa,nea) = size(A.data)
+    (mb,nb,nsb,neb) = size(B.data)
+    (mc,nc,nsc,nec) = size(C.data)
+    @assert ma == mb == mc && na == nb == nc && nea == neb == nec
+    if nsa == nsb == nsc
+        C.data .*= β
+        for iS = 1:nsa
+            for iK = 1:nea
+                @inbounds @views C.data[:,:,iS,iK] += α*A.data[:,:,iS,iK]*B.data[:,:,iS,iK]
+            end
+        end
+    elseif nsa == 1 && nsb == nsc
+        C.data .*= β
+        for iS = 1:nsb
+            for iK = 1:nea
+                @inbounds @views C.data[:,:,iS,iK] += α*A.data[:,:,1,iK]*B.data[:,:,iS,iK]
+            end
+        end
+    elseif nsb == 1 && nsa == nsc
+        C.data .*= β
+        for iS = 1:nsa
+            for iK = 1:nea
+                @inbounds @views C.data[:,:,iS,iK] += α*A.data[:,:,iS,iK]*B.data[:,:,1,iK]
+            end
+        end
+    else
+        throw(DimensionMismatch("Local matrices A $(size(A.data)), B $(size(B.data)), and C $(size(C.data))"))
+    end
+    return C
 end
 
 function (*)(A::LocalMatrix{T1}, x::AbstractVector{T2}) where {T1, T2}
-    println("my *1")
     (m,n,ns,ne) = size(A.data)
     b = Vector{typeof(zero(T1)*zero(T2))}(undef, m*ns*ne)
     for j = 1:ne
         for i = 1:ns
             offset = ns*(i-1)*(j-1)
-            b[offset+m*(i-1)+1:offset+m*i] = A.data[:,:,i,j]*x[offset+n*(i-1)+1:offset+n*i]
+            @views b[offset+m*(i-1)+1:offset+m*i] = A.data[:,:,i,j]*x[offset+n*(i-1)+1:offset+n*i]
         end
     end
     return b
 end
 
 function (*)(A::LocalMatrix{T1}, x::SolutionVector{T2}) where {T1, T2}
-    println("my *2")
+    #println("my *2")
     (m,n,ns,ne) = size(A.data)
     (nx,nsx,nex) = size(x.data)
     @assert n == nx && ne == nex
@@ -145,13 +191,13 @@ function (*)(A::LocalMatrix{T1}, x::SolutionVector{T2}) where {T1, T2}
     if ns == nsx
         for j = 1:ne
             for i = 1:nsx
-                @inbounds b[:,i,j] = A.data[:,:,i,j]*x[:,i,j]
+                @inbounds @views b[:,i,j] = A.data[:,:,i,j]*x[:,i,j]
             end
         end
     elseif ns == 1
         for j = 1:ne
             for i = 1:nsx
-                @inbounds b[:,i,j] = A.data[:,:,1,j]*x[:,i,j]
+                @inbounds @views b[:,i,j] = A.data[:,:,1,j]*x[:,i,j]
             end
         end
     else
