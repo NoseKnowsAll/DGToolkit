@@ -89,7 +89,7 @@ end
 Tests whether a LocalMatrix is symmetric
 """
 function LinearAlgebra.issymmetric(A::LocalMatrix)
-    all(LinearAlgebra.issymmetric, [@view A.data[:,:,i,j] for i=1:size(A.data,3), j=1:size(A.data,4)])
+    all(LinearAlgebra.issymmetric, [@view A.data[:,:,iS,iK] for iS=1:size(A.data,3), iK=1:size(A.data,4)])
 end
 
 """
@@ -97,7 +97,7 @@ end
 Tests whether a LocalMatrix is diagonal
 """
 function LinearAlgebra.isdiag(A::LocalMatrix)
-    all(LinearAlgebra.isdiag, [@view A.data[:,:,i,j] for i=1:size(A.data,3), j=1:size(A.data,4)])
+    all(LinearAlgebra.isdiag, [@view A.data[:,:,iS,iK] for iS=1:size(A.data,3), iK=1:size(A.data,4)])
 end
 
 (==)(A::LocalMatrix, B::LocalMatrix) = A.data == B.data
@@ -113,20 +113,20 @@ function (*)(A::LocalMatrix{T1}, B::LocalMatrix{T2}) where {T1,T2}
     @assert ma == mb && na == nb && nea == neb
     data = Array{typeof(zero(T1)*zero(T2)),4}(undef, ma,na,max(nsa,nsb),nea)
     if nsa == nsb
-        for iS = 1:nsa
-            for iK = 1:nea
+        for iK = 1:nea
+            for iS = 1:nsa
                 @inbounds @views data[:,:,iS,iK] = A.data[:,:,iS,iK]*B.data[:,:,iS,iK]
             end
         end
     elseif nsa == 1
-        for iS = 1:nsb
-            for iK = 1:nea
+        for iK = 1:nea
+            for iS = 1:nsb
                 @inbounds @views data[:,:,iS,iK] = A.data[:,:,1,iK]*B.data[:,:,iS,iK]
             end
         end
     elseif nsb == 1
-        for iS = 1:nsa
-            for iK = 1:nea
+        for iK = 1:nea
+            for iS = 1:nsa
                 @inbounds @views data[:,:,iS,iK] = A.data[:,:,iS,iK]*B.data[:,:,1,iK]
             end
         end
@@ -145,22 +145,22 @@ function LinearAlgebra.mul!(C::LocalMatrix{T3}, A::LocalMatrix{T1}, B::LocalMatr
     @assert ma == mb == mc && na == nb == nc && nea == neb == nec
     if nsa == nsb == nsc
         C.data .*= β
-        for iS = 1:nsa
-            for iK = 1:nea
+        for iK = 1:nea
+            for iS = 1:nsa
                 @inbounds @views C.data[:,:,iS,iK] += α*A.data[:,:,iS,iK]*B.data[:,:,iS,iK]
             end
         end
     elseif nsa == 1 && nsb == nsc
         C.data .*= β
-        for iS = 1:nsb
-            for iK = 1:nea
+        for iK = 1:nea
+            for iS = 1:nsb
                 @inbounds @views C.data[:,:,iS,iK] += α*A.data[:,:,1,iK]*B.data[:,:,iS,iK]
             end
         end
     elseif nsb == 1 && nsa == nsc
         C.data .*= β
-        for iS = 1:nsa
-            for iK = 1:nea
+        for iK = 1:nea
+            for iS = 1:nsa
                 @inbounds @views C.data[:,:,iS,iK] += α*A.data[:,:,iS,iK]*B.data[:,:,1,iK]
             end
         end
@@ -173,10 +173,10 @@ end
 function (*)(A::LocalMatrix{T1}, x::AbstractVector{T2}) where {T1, T2}
     (m,n,ns,ne) = size(A.data)
     b = Vector{typeof(zero(T1)*zero(T2))}(undef, m*ns*ne)
-    for j = 1:ne
-        for i = 1:ns
-            offset = ns*(i-1)*(j-1)
-            @views b[offset+m*(i-1)+1:offset+m*i] = A.data[:,:,i,j]*x[offset+n*(i-1)+1:offset+n*i]
+    for iK = 1:ne
+        for iS = 1:ns
+            offset = ns*(iS-1)*(iK-1)
+            @views b[offset+m*(iS-1)+1:offset+m*iS] = A.data[:,:,iS,iK]*x[offset+n*(iS-1)+1:offset+n*iS]
         end
     end
     return b
@@ -189,15 +189,15 @@ function (*)(A::LocalMatrix{T1}, x::SolutionVector{T2}) where {T1, T2}
     @assert n == nx && ne == nex
     b = Array{typeof(zero(T1)*zero(T2)),3}(undef, m,nsx,ne)
     if ns == nsx
-        for j = 1:ne
-            for i = 1:nsx
-                @inbounds @views b[:,i,j] = A.data[:,:,i,j]*x[:,i,j]
+        for iK = 1:ne
+            for iS = 1:nsx
+                @inbounds @views b[:,iS,iK] = A.data[:,:,iS,iK]*x[:,iS,iK]
             end
         end
     elseif ns == 1
-        for j = 1:ne
-            for i = 1:nsx
-                @inbounds @views b[:,i,j] = A.data[:,:,1,j]*x[:,i,j]
+        for iK = 1:ne
+            for iS = 1:nsx
+                @inbounds @views b[:,iS,iK] = A.data[:,:,1,iK]*x[:,iS,iK]
             end
         end
     else

@@ -1,7 +1,7 @@
 """
     struct SolutionVector{T} <: AbstractVector{T}
 Solution vector stored as 3D vector evaluated at nodes/quadrature points.
-`A[:,s,iK]` is the solution evaluated for state s and element iK
+`A[:,iS,iK]` is the solution evaluated for state iS and element iK
 """
 struct SolutionVector{T} <: AbstractVector{T}
     data::Array{T,3}
