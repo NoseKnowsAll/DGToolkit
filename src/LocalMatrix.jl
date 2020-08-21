@@ -41,11 +41,11 @@ end
 @inline function Base.getindex(A::LocalMatrix{T}, i::Integer, j::Integer) where {T}
     @boundscheck checkbounds(Bool, A,i,j)
     (m,n,ns,ne) = size(A.data)
-    im = rem1(i ,m ); i2 = div(i ,m )
-    is = rem1(i2,ns); i3 = div(i2,ns)
+    im = rem1(i ,m ); i2 = div(i ,m , RoundUp)
+    is = rem1(i2,ns); i3 = div(i2,ns, RoundUp)
     ie = rem1(i3,ne)
-    jn = rem1(j ,n ); j2 = div(j ,n )
-    js = rem1(j2,ns); j3 = div(j2,ns)
+    jn = rem1(j ,n ); j2 = div(j ,n , RoundUp)
+    js = rem1(j2,ns); j3 = div(j2,ns, RoundUp)
     je = rem1(j3,ne)
     if is==js && ie==je && checkbounds(Bool,A.data, im,jn,is,ie)
         return @inbounds A.data[im,jn,is,ie]
@@ -70,11 +70,11 @@ end
 @inline function Base.setindex!(A::LocalMatrix, v, i::Integer, j::Integer)
     @boundscheck checkbounds(A,i,j)
     (m,n,ns,ne) = size(A.data)
-    im = rem1(i ,m ); i2 = div(i ,m )
-    is = rem1(i2,ns); i3 = div(i2,ns)
+    im = rem1(i ,m ); i2 = div(i ,m , RoundUp)
+    is = rem1(i2,ns); i3 = div(i2,ns, RoundUp)
     ie = rem1(i3,ne)
-    jn = rem1(j ,n ); j2 = div(j ,n )
-    js = rem1(j2,ns); j3 = div(j2,ns)
+    jn = rem1(j ,n ); j2 = div(j ,n , RoundUp)
+    js = rem1(j2,ns); j3 = div(j2,ns, RoundUp)
     je = rem1(j3,ne)
     if is==js && ie==je && checkbounds(Bool,A.data, im,jn,is,ie)
         @inbounds setindex!(A.data, v, im,jn,is,ie)
@@ -191,13 +191,13 @@ function (*)(A::LocalMatrix{T1}, x::SolutionVector{T2}) where {T1, T2}
     if ns == nsx
         for iK = 1:ne
             for iS = 1:nsx
-                @inbounds @views b[:,iS,iK] = A.data[:,:,iS,iK]*x[:,iS,iK]
+                @inbounds @views b[:,iS,iK] = A.data[:,:,iS,iK]*x.data[:,iS,iK]
             end
         end
     elseif ns == 1
         for iK = 1:ne
             for iS = 1:nsx
-                @inbounds @views b[:,iS,iK] = A.data[:,:,1,iK]*x[:,iS,iK]
+                @inbounds @views b[:,iS,iK] = A.data[:,:,1,iK]*x.data[:,iS,iK]
             end
         end
     else
