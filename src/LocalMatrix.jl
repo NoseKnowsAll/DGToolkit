@@ -266,7 +266,7 @@ end
 Linear solve A\\x using block-diagonal LU factorizations. Compute this
 block-diagonal factorization if not yet computed.
 """
-function LinearAlgebra.(\)(A::LocalMatrix, x::SolutionVector)
+function LinearAlgebra.:\(A::LocalMatrix, x::SolutionVector)
     println("my \\")
     (m,n,ns,ne) = size(A.data)
     (nx,nsx,nex) = size(x.data)
