@@ -205,3 +205,30 @@ function (*)(A::LocalMatrix{T1}, x::SolutionVector{T2}) where {T1, T2}
     end
     return SolutionVector(b)
 end
+
+"""
+    L2_error(u::SolutionVector, u_true::SolutionVector, M::LocalMatrix)
+Compute the L2 error ||u-u_true||_{L_2} = (u-u_true)'*M*(u-u_true) of a
+SolutionVector (see: L2_norm). Reuses the storage in u_true to compute this error.
+"""
+function L2_error!(u::SolutionVector, u_true::SolutionVector, M::LocalMatrix)
+    u_true -= u
+    return L2_norm(u_true, M)
+end
+
+"""
+    L2_norm(u::SolutionVector, M::LocalMatrix)
+Compute the L2 norm ||u||_{L_2} = u'*M*u of a SolutionVector. If u has multiple
+states, then return array of L2 norms for each state.
+"""
+function L2_norm(u::SolutionVector, M::LocalMatrix)
+    Mu = M*u
+    (n,ns,ne) = true_size(Mu)
+    l2_norms = zeros(ns)
+    for iK = 1:ne
+        for iS = 1:ns
+            @views l2_norms[iS] += u.data[:,iS,iK]'*Mu.data[:,iS,iK]
+        end
+    end
+    return l2_norms
+end
