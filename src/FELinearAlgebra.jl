@@ -13,16 +13,11 @@ export
     LocalMatrix,
     SolutionVector,
     # Functions
-    issymmetric,
-    isdiag,
     L2_error!,
     L2_norm,
     lp_error!,
     lp_norm,
-    mul!,
     true_size
-    # Operators
-    # Constants
 
 include("SolutionVector.jl")
 include("LocalMatrix.jl")

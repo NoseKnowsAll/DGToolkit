@@ -5,14 +5,15 @@ end
 
 """
     struct LocalMatrix{T} <: AbstractMatrix{T}
-Block diagonal structure for local matrix. `A[:,:,s,iK]` is a block matrix for
-state s and element iK
+Block diagonal structure for local matrix. `A[:,:,iS,iK]` is a block matrix for
+state iS and element iK
 """
 struct LocalMatrix{T} <: AbstractMatrix{T}
     data::Array{T,4}
+    factorizations::Array{Any,2}
 
     function LocalMatrix(data::Array{T,4}) where {T}
-        new{T}(data)
+        new{T}(data,Array{Any}(undef, size(data,3), size(data,4)))
     end
 end
 
@@ -131,12 +132,15 @@ function (*)(A::LocalMatrix{T1}, B::LocalMatrix{T2}) where {T1,T2}
             end
         end
     else
-        throw(DimensionMismatch("Local matrices A ($(size(A.data))) and B ($(size(B.data)))"))
+        throw(DimensionMismatch("Local matrices A $(size(A.data)) and B $(size(B.data))"))
     end
     return LocalMatrix(data)
 end
 
-""" Return A B α + C β by overwriting C """
+"""
+    mul!(C::LocalMatrix, A::LocalMatrix, B::LocalMatrix, α::Number, β::Number)
+Return A B α + C β by overwriting C
+"""
 function LinearAlgebra.mul!(C::LocalMatrix{T3}, A::LocalMatrix{T1}, B::LocalMatrix{T2}, α::Number, β::Number) where {T1,T2,T3}
     @assert T3 == typeof(zero(T1)*zero(T2))
     (ma,na,nsa,nea) = size(A.data)
@@ -201,9 +205,74 @@ function (*)(A::LocalMatrix{T1}, x::SolutionVector{T2}) where {T1, T2}
             end
         end
     else
-        throw(DimensionMismatch("Local matrix A ($(size(A.data))) cannot multiply x ($(size(x.data)))"))
+        throw(DimensionMismatch("Local matrix A $(size(A.data)) cannot multiply x $(size(x.data))"))
     end
     return SolutionVector(b)
+end
+
+"""
+    factorize(A::LocalMatrix)
+Explicitly compute the block-diagonal full LU factorizations of A
+"""
+function factorize!(A::LocalMatrix)
+    (m,n,ns,ne) = size(A.data)
+    @assert m == n
+    for iK = 1:ne
+        for iS = 1:ns
+            A.factorizations[iS,iK] = LinearAlgebra.lu(A.data[:,:,iS,iK])
+        end
+    end
+end
+
+"""
+    isfactorized(A::LocalMatrix)
+Return whether this LocalMatrix has been factorized yet
+"""
+isfactorized(A::LocalMatrix) = isassigned(A.factorizations,1)
+
+"""
+    ldiv!(A::LocalMatrix, x::SolutionVector)
+In-place linear solve A\\x using block-diagonal LU factorizations. Compute this
+block-diagonal factorization if not yet computed.
+"""
+function LinearAlgebra.ldiv!(A::LocalMatrix, x::SolutionVector)
+    println("my ldiv!")
+    (m,n,ns,ne) = size(A.data)
+    (nx,nsx,nex) = size(x.data)
+    @assert n == nx && ne == nex && m == n
+    if !isfactorized(A)
+        factorize!(A)
+    end
+    if ns == nsx
+        for iK = 1:ne
+            for iS = 1:nsx
+                @views LinearAlgebra.ldiv!(A.factorizations[iS,iK], x.data[:,iS,iK])
+            end
+        end
+    elseif ns == 1
+        for iK = 1:ne
+            for iS = 1:nsx
+                @views LinearAlgebra.ldiv!(A.factorizations[1,iK], x.data[:,iS,iK])
+            end
+        end
+    else
+        throw(DimensionMismatch("Local matrix A $(size(A.data)) cannot \\ x $(size(x.data))"))
+    end
+    x
+end
+
+"""
+    A::LocalMatrix \\ x::SolutionVector
+Linear solve A\\x using block-diagonal LU factorizations. Compute this
+block-diagonal factorization if not yet computed.
+"""
+function LinearAlgebra.(\)(A::LocalMatrix, x::SolutionVector)
+    println("my \\")
+    (m,n,ns,ne) = size(A.data)
+    (nx,nsx,nex) = size(x.data)
+    @assert n == nx && ne == nex && m == n
+    b = deepcopy(x)
+    LinearAlgebra.ldiv!(A, b)
 end
 
 """
