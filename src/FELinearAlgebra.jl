@@ -5,7 +5,7 @@ Provides Finite Element linear algebra matrices
 module FELinearAlgebra
 
 import LinearAlgebra
-import Base: *, +, -, ==
+import Base: *, +, -, ==, \
 import Base: getindex, setindex!, size
 
 export
