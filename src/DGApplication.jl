@@ -1,42 +1,54 @@
+module DGApplication
+
 import LinearAlgebra
 
+# Types
+export Application
+export Convection, ConvectionDiffusion, NavierStokes, ElasticWave
+# Functions
+export is_second_order, nstates
+export flux_c!, flux_d!
+export numerical_flux_c!, boundary_flux_c!
+export source!
+
+
 """
-    abstract type DGApplication{N}
+    abstract type Application{N}
 Supertype for applications (PDEs) that specific PDEs can extend. Generalizes
 the equation `u_t + ∇⋅f_c(u) + ∇⋅f_d(u,∇u) = s(t,x) where u = u(t,x)`. N is the
 dimension of the PDE, aka size of the vector x.
 """
-abstract type DGApplication{N} end
+abstract type Application{N} end
 
 """
-    is_second_order(app::DGApplication)
+    is_second_order(app::Application)
 Returns whether the PDE is 2nd order. Default: false => f_d(u,∇u) = 0
 """
-is_second_order(app::DGApplication) = false
+is_second_order(app::Application) = false
 """
-    nstates(app::DGApplication)
+    nstates(app::Application)
 Returns the number of state variables for the given PDE. Default: 1
 """
-nstates(app::DGApplication) = 1
+nstates(app::Application) = 1
 """
-    flux_c!(flux, app::DGApplication, u)
+    flux_c!(flux, app::Application, u)
 Computes the 1st order, or convective, flux f_c(u) for the given application.
 Default: f_c(u) = 0.0
 """
-flux_c!(flux, app::DGApplication{N}, u) where {N} = (flux .= zeros(typeof(u[1]),nstates(app),N))
+flux_c!(flux, app::Application{N}, u) where {N} = (flux .= zeros(typeof(u[1]),nstates(app),N))
 """
-    flux_d!(flux, app::DGApplication, u)
+    flux_d!(flux, app::Application, u)
 Computes the 2nd order, or diffusive, flux f_d(u,∇u) for the given application.
 Default: f_d(u,∇u) = 0.0
 """
-flux_d!(flux, app::DGApplication{N}, u, Du) where {N} = (flux .= zeros(typeof(u[1]),nstates(app),N))
+flux_d!(flux, app::Application{N}, u, Du) where {N} = (flux .= zeros(typeof(u[1]),nstates(app),N))
 """
-    numerical_flux_c!(flux, app::DGApplication, uK, uN, normal_k)
+    numerical_flux_c!(flux, app::Application, uK, uN, normal_k)
 Given the state vector at this element (uK) and its neighbor (uN), compute the
 convection numerical flux function for this PDE dotted with the normal, and
 store the results in flux. Default: f(uK,uN)*n = upwinding with positive speed
 """
-function numerical_flux_c!(flux, app::DGApplication{N}, uK, uN, normal_k) where {N}
+function numerical_flux_c!(flux, app::Application{N}, uK, uN, normal_k) where {N}
     @assert N == length(normal_k)
     flux_k = Array{Float64,2}(undef, nstates(app), N)
     flux_c!(flux_k, app, uK)
@@ -48,17 +60,26 @@ function numerical_flux_c!(flux, app::DGApplication{N}, uK, uN, normal_k) where 
     end
 end
 """
-    source!(s_val, app::DGApplication, t=0.0, x=0.0)
+    boundary_flux_c!(flux, app::Application, u, bc, normal_k)
+Given the state vector u, compute the boundary condition numerical flux function
+for this PDE dotted with the normal, and store the results in flux.
+Default: f(u)*n = 0.0 (Homogeneous Dirichlet BC)
+"""
+function boundary_flux_c!(flux, app::Application, u, bc, normal_k)
+    flux .= zeros(typeof(u[1]),nstates(app))
+end
+"""
+    source!(s_val, app::Application, t=0.0, x=0.0)
 Computes the source(t,x) of the PDE. Default: source(t,x) = 0.0
 """
-source!(s_val, app::DGApplication, t=0.0, x=0.0) = (s_val .= zeros(nstates(app)))
+source!(s_val, app::Application, t=0.0, x=0.0) = (s_val .= zeros(nstates(app)))
 
 
 """
-    struct Convection{N} <: DGApplication{N}
+    struct Convection{N} <: Application{N}
 Defines first-order linear convection equation u_t + c⋅∇u = 0
 """
-struct Convection{N} <: DGApplication{N}
+struct Convection{N} <: Application{N}
     c
     Convection{N}(c) where {N} = new{N}(c)
     function Convection{N}(param_dict::Dict{String,Any}) where {N}
@@ -75,11 +96,11 @@ flux_c!(flux, app::Convection, u) = (flux .= app.c.*u)
 
 
 """
-    struct ConvectionDiffusion{N} <: DGApplication{N}
+    struct ConvectionDiffusion{N} <: Application{N}
 Defines linear convection-diffusion equation u_t + c⋅∇u - dΔu = 0
 Must initialize struct with constants c,d
 """
-struct ConvectionDiffusion{N} <: DGApplication{N}
+struct ConvectionDiffusion{N} <: Application{N}
     c
     d
     ConvectionDiffusion{N}(c,d) where {N} = new{N}(c,d)
@@ -103,7 +124,7 @@ flux_d!(flux, app::ConvectionDiffusion, u, Du) where {N} = (flux .= app.d.*Du)
 
 
 """
-    struct NavierStokes{N} <: DGApplication{N}
+    struct NavierStokes{N} <: Application{N}
 Defines the compressible Navier-Stokes equations:
 ∂ρ/∂t + ∇⋅(ρu) = 0
 ∂(ρu)/∂t + ∇⋅(ρu ⊗ u' + pI - τ) = 0
@@ -116,7 +137,7 @@ with μ=1/Re the viscosity coefficient, and q is the heat flux
 q := -μ/Pr ∇(E + p/ρ - 1/2||u||_2^2) = -γ/(Pr*Re) ∇(E+1/2||u||_2^2),
 with Pr the Prandtl number (typically 0.72).
 """
-struct NavierStokes{N} <: DGApplication{N}
+struct NavierStokes{N} <: Application{N}
     # Constants TODO
     " Reynolds number "
     Re
@@ -194,7 +215,7 @@ end
 
 
 """
-    struct ElasticWave{N} <: DGApplication{N}
+    struct ElasticWave{N} <: Application{N}
 Defines the elastic wave equation in conservation form:
 ∂E/∂t + ∇⋅(-1/2(u⊗I+I⊗u)) = 0
 ∂(ρu)/∂t + ∇⋅(-C:E) = f
@@ -202,7 +223,7 @@ where ρ is the density, u is the velocity, E is the strain tensor, f is a
 forcing function or source term, and I is the N × N identity tensor. Defining
 λ,μ to be the Lame parameters, in isotropic media, stress tensor S=CE=2μE+λtr(E)I
 """
-struct ElasticWave{N} <: DGApplication{N}
+struct ElasticWave{N} <: Application{N}
     " Pressure wave velocity (actually speed)"
     vp
     " Shear wave velocity (actually speed) "
@@ -280,6 +301,38 @@ function numerical_flux_c!(flux, app::ElasticWave{N}, uK, uN, normal_k) where {N
     flux .= (flux_k+flux_n)*normal_k./2.0 - (C/2.0)*(uN-uK)
 end
 """
+    boundary_flux_c!(flux, app::ElasticWave, u, bc, normal_k)
+Free surface boundary condition (v=0) and absorbing boundary condition (Z*v)
+for elastic wave equation
+"""
+function boundary_flux_c!(flux, app::ElasticWave{N}, u, bc, normal_k) where {N}
+    nstrains = N*(N+1)/2
+    vel = u[nstrains+1:end]./app.ρ
+    flux .= 0.0
+    # Remember - we are using Voigt notation for strain tensor
+    # Compute -1/2(vel⊗I + I⊗vel)*n for Strain fluxes
+    for i = 1:N # diagonal of strain tensor
+        flux[i] = -vel[i]*normal_k[i]
+    end
+    offset = 1
+    for i = N:-1:2 # upper-triangular portion of strain tensor
+        for j = i-1:-1:1
+            flux[N+offset] += -1/2*vel[j]*normal_k[i]
+            flux[N+offset] += -1/2*vel[i]*normal_k[j]
+            offset += 1
+        end
+    end
+    if bc == -1 # Free surface BC
+        # flux[nstrains+1:end] = 0.0
+    elseif bc == -2 # Absorbing/non-reflecting BC
+        # flux[nstrains+1:end] = ρ (vp n⊗n + vs (I-n⊗n))*vel
+        Z = app.ρ*(app.vp*normal_k*normal_k'+app.vs*(diagm(ones(N))-normal_k*normal_k'))
+        flux[nstrains+1:end] .= Z*vel
+    else
+        error("FATAL: Boundary condition not a valid choice!")
+    end
+end
+"""
     source!(s_val, app::ElasticWave, t=0.0, x=0.0)
 Computes the source(t,x) of the elastic wave equation:
 source(t,x) = [0, ρ*wave(t)*g(x)]
@@ -295,4 +348,6 @@ function source!(s_val, app::ElasticWave{N}, t=0.0, x=0.0) where {N}
     # TODO: g(x) := 1 => source wave active at all locations
     s_val[nstrains+1:end] .= app.ρ*wave_amp*1
     s_val
+end
+
 end
