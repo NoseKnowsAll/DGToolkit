@@ -43,13 +43,13 @@ mutable struct Mesh
     For every face iF, face vertex i, `f2v[i,iF]` = this element's vertex index """
     f2v
     """ Element-to-Element neighbor mapping:
-    For every element iK, face i, `e2e[i,iK]` = element index of neighbor on ith face """
+    For every element iK, face iF, `e2e[iF,iK]` = element index of neighbor on face iF """
     e2e
     """ Element-to-Face mapping:
-    For every element iK, face i, `e2f[i,iK]` = face index on neighbor's face array """
+    For every element iK, face iF, `e2f[iF,iK]` = face index on neighbor's face array """
     e2f
     """ Normals mapping:
-    For every element iK, face i, `normals[:,i,iK]` = outward normal vector of face i """
+    For every element iK, face iF, `normals[:,iF,iK]` = outward normal vector of face iF """
     normals
     """
     Bilinear mapping:
@@ -103,7 +103,7 @@ mutable struct Mesh
     """
     Jacobian of transformation evaluated at each face quadrature point, element
 
-    For every element iK, face iF, face quad point iQ, `JkF[:,:,iQ,iK]`
+    For every element iK, face iF, face quad point iQ, `JkF[:,:,iQ,iF,iK]`
     ∈ ℜ^(DIM x DIM) is the Jacobian of the mapping from the reference face
     element to face iF of element iK at face quad point iQ
     """
@@ -118,8 +118,8 @@ mutable struct Mesh
     """
     Element face to node mapping
 
-    For every face i (same mapping across all elements), `ef2n[:,i]` = local
-    node IDs of nodes on face i
+    For every face iF (same mapping across all elements), `ef2n[:,iF]` = local
+    node IDs of nodes on face iF
     """
     ef2n
     """
@@ -134,8 +134,8 @@ mutable struct Mesh
     """
     Element face to quadrature point mapping
 
-    For every face i (same mapping across all elements), `ef2q[:,i]` = local
-    quad IDs of quadrature points on face i
+    For every face iF (same mapping across all elements), `ef2q[:,iF]` = local
+    quad IDs of quadrature points on face iF
     """
     ef2q
     """
