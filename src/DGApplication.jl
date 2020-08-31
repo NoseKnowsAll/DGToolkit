@@ -350,4 +350,4 @@ function source!(s_val, app::ElasticWave{N}, t=0.0, x=0.0) where {N}
     s_val
 end
 
-end
+end # Module DGApplication
