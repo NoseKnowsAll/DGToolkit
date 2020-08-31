@@ -54,7 +54,7 @@ function numerical_flux_c!(flux, app::Application{N}, uK, uN, normal_k) where {N
     flux_c!(flux_k, app, uK)
     flux_n = Array{Float64,2}(undef, nstates(app), N)
     flux_c!(flux_n, app, uN)
-    flux .= zero(typeof(uK[1]), nstates(app))
+    flux .= zeros(typeof(uK[1]), nstates(app))
     for l=1:N
         @views flux .+= (normal_k[l] > 0.0 ? flux_k[:,l] : flux_n[:,l]).*normal_k[l]
     end
@@ -92,7 +92,7 @@ end
     flux_c!(flux, app::Convection, u)
 Computes the convective flux for convection equation: f_c(u) = cu
 """
-flux_c!(flux, app::Convection, u) = (flux .= app.c.*u)
+flux_c!(flux, app::Convection, u) = (flux .= u*app.c')
 
 
 """
@@ -115,7 +115,7 @@ is_second_order(app::ConvectionDiffusion) = true
     flux_c!(flux, app::ConvectionDiffusion, u)
 Computes the convective flux for convection-diffusion equation: f_c(u) = cu
 """
-flux_c!(flux, app::ConvectionDiffusion, u) = (flux .= app.c.*u)
+flux_c!(flux, app::ConvectionDiffusion, u) = (flux .= u*app.c')
 """
     flux_d!(flux, app::ConvectionDiffusion, u, Du)
 Computes the diffusion flux for convection-diffusion equation: f_d(u,∇u)=d∇u
