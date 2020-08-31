@@ -13,6 +13,7 @@ using FELinearAlgebra
 
 export Solver
 export dg_rhs!
+export nstates, nelements, dofsV, dofsF, nQV, nQF
 
 """
     struct Solver
@@ -29,8 +30,10 @@ struct Solver
     x1D
     " Gauss quadrature points in 1D. N-D version can be formed by kronecker product "
     xQ1D
-    " Gauss quadrature weights in ND "
+    " Gauss quadrature weights in ND, for use within volume "
     wQV
+    " Gauss quadrature weights in (N-1)D, for use along faces "
+    wQF
     ###########
     # TODO: should these matrices possibly be stored in a more abstract fashion?
     ###########
@@ -72,7 +75,8 @@ struct Solver
 
     function Solver(order::Int, mesh::Geometry.Mesh, app::Application)
         # Initialize node, quadrature, and interpolation matrix information
-        (x1D,xQ1D,wQV,xTk1D,InterpV,InterpF,dInterpV,dInterpF,InterpTk,InterpTkQ) =
+        (x1D,xQ1D,wQV,wQF,xTk1D,InterpV,InterpF,
+            dInterpV,dInterpF,InterpTk,InterpTkQ) =
             precompute_interpolation_matrices(order)
         # Update Mesh to know about solver information
         Geometry.setup_nodes!(mesh,InterpTk,order)
@@ -85,7 +89,7 @@ struct Solver
         # Initialize local matrices
         Locals = precompute_local_matrices(order,mesh,wQV,InterpV,InterpF,dInterpV,dInterpF)
 
-        return new(mesh,app,order, x1D,xQ1D,wQV, Locals...,
+        return new(mesh,app,order, x1D,xQ1D,wQV,wQF, Locals...,
             InterpV,InterpF,dInterpV,dInterpF,InterpTk,InterpTkQ,
             u_interpV, u_interpF)
     end
@@ -93,7 +97,7 @@ struct Solver
 end
 
 " Number of states in state vector "
-nstates(solver::Solver) = nstates(solver.app)
+DGApplication.nstates(solver::Solver) = DGApplication.nstates(solver.app)
 " Number of elements in mesh "
 nelements(solver::Solver) = solver.mesh.n_elements
 " Degrees of freedom per element "
@@ -115,6 +119,7 @@ function precompute_interpolation_matrices(order)
     # Gauss quadrature points
     (xQ1D,wQ1D) = Basis1D.gauss_quad(2*order)
     wQV = kron(wQ1D,wQ1D)
+    wQF = deepcopy(wQ1D)
 
     # Volume/Element interpolation
     InterpV = Basis2D.interpolation_matrix2D((x1D,x1D),(xQ1D,xQ1D))
@@ -131,7 +136,7 @@ function precompute_interpolation_matrices(order)
     InterpTk = Basis2D.interpolation_matrix2D((xTk1D,xTk1D),(x1D,x1D))
     InterpTkQ = Basis2D.interpolation_matrix2D((xTk1D,xTk1D),(xQ1D,xQ1D))
 
-    return (x1D,xQ1D,wQV,xTk1D,InterpV,InterpF,dInterpV,dInterpF,InterpTk,InterpTkQ)
+    return (x1D,xQ1D,wQV,wQF,xTk1D,InterpV,InterpF,dInterpV,dInterpF,InterpTk,InterpTkQ)
 end
 
 """
@@ -220,7 +225,7 @@ function dg_rhs!(du, u_curr, all_param, t)
 end
 
 """
-    interpolate(solver::Solver, curr::SolutionVector, to_interpV, to_interpF)
+    interpolate!(solver::Solver, curr::SolutionVector, to_interpV, to_interpF)
 Interpolate curr from SolutionVector to volume quadrature points and store in
 to_interpV. Interpolate curr from SolutionVector to face quadrature points and
 store in to_interpF.
@@ -228,12 +233,12 @@ store in to_interpF.
 function interpolate!(solver::Solver, curr::SolutionVector, to_interpV, to_interpF)
     nstates = true_size(curr, 2)
     # First grab solution on faces and pack into array on_faces
-    on_faces = Array{Float64,4}(undef, dofsF(solver),nstates(solver),Geometry.N_FACES)
-    for iK = 1:solver.mesh.nElements
+    on_faces = Array{Float64,3}(undef, dofsF(solver),nstates,Geometry.N_FACES)
+    for iK = 1:nelements(solver)
         for iF = 1:Geometry.N_FACES
             for iS = 1:nstates
                 for iFN = 1:dofsF(solver)
-                    on_faces[iFN,iS,iF] = curr[solver.mesh.ef2n[iFN,iF],iS,iK]
+                    on_faces[iFN,iS,iF] = curr.data[solver.mesh.ef2n[iFN,iF],iS,iK]
                 end
             end
         end
@@ -243,7 +248,7 @@ function interpolate!(solver::Solver, curr::SolutionVector, to_interpV, to_inter
         mul!(to_interpF_vecs, solver.InterpF,on_face_vecs)
 
         # Volume interpolation: to_interpV = InterpV*curr
-        curr_vecs = @view curr[:,:,iK]
+        curr_vecs = @view curr.data[:,:,iK]
         to_interpV_vecs = @view to_interpV[:,:,iK]
         mul!(to_interpV_vecs, solver.InterpV,curr_vecs)
     end
@@ -254,7 +259,7 @@ end
 Compute du = source(x,t) within element volumes
 """
 function source_term!(du, solver::Solver, t)
-    JWI = Array{Float64,2}(undef, nQV(solver),dofs(solver))
+    JWI = Array{Float64,2}(undef, nQV(solver),dofsV(solver))
     f = Array{Float64,2}(undef, nQV(solver),nstates(solver))
     for iK = 1:nelements(solver)
         # JWI = Diag(J)*Diag(w)*InterpV
@@ -325,25 +330,25 @@ function convect_volume!(du, solver::Solver)
 
     for iK = 1:nelements(solver)
         for iQ = 1:nQV(solver)
-            uK .= solver.u_interpV[:,iQ,iK]
+            uK .= solver.u_interpV[iQ,:,iK]
             @views flux_c!(fc[:,:,iQ], solver.app, uK)
         end
 
         # TODO: Eventually this should be done in matrix-free approach
-        Jks = @view mesh.Jk[:,:,:,iK]
+        Jks = @view solver.mesh.Jk[:,:,:,iK]
         # op_q = wQ * J^{-1}*det(J) == wQ * adj(J)
         op_q = similar(Jks)
         op_q[1,1,:] = solver.wQV.* Jks[2,2,:]
         op_q[1,2,:] = solver.wQV.*-Jks[1,2,:]
         op_q[2,1,:] = solver.wQV.*-Jks[2,1,:]
         op_q[2,2,:] = solver.wQV.* Jks[1,1,:]
-        @views for iQ = 1:nQV
+        @views for iQ = 1:nQV(solver)
             # grad = op * fc'
             mul!(grad[:,:,iQ], op_q[:,:,iQ], fc[:,:,iQ]')
         end
         # du += dInterpV'*grad
-        @views mul!(du.data[:,:,iK], dInterpV[:,:,1]', grad[1,:,:]', 1.0, 1.0)
-        @views mul!(du.data[:,:,iK], dInterpV[:,:,2]', grad[2,:,:]', 1.0, 1.0)
+        @views mul!(du.data[:,:,iK], solver.dInterpV[:,:,1]', grad[1,:,:]', 1.0, 1.0)
+        @views mul!(du.data[:,:,iK], solver.dInterpV[:,:,2]', grad[2,:,:]', 1.0, 1.0)
     end
 end
 

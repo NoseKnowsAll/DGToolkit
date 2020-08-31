@@ -327,7 +327,7 @@ function setup_nodes!(mesh::Mesh, InterpTk, order; compute_global=false)
         end
     end
 
-    mesh.n_face_nodes = init_face_map!(mesh, mesh.ef2n, mesh.nfn2fn, mesh.order+1)
+    (mesh.n_face_nodes,mesh.ef2n,mesh.nfn2fn) = init_face_map(mesh, mesh.order+1)
 end
 
 """
@@ -351,13 +351,12 @@ function setup_quads!(mesh::Mesh, InterpTkQ; compute_global=false)
         end
     end
 
-    # TODO: Should it be (order+1)/2?
     nQ = ceil(Int, mesh.order+1/2) # Quadrature points per face
-    mesh.n_face_quads = init_face_map!(mesh, mesh.ef2q, mesh.nfq2fq, nQ)
+    (mesh.n_face_quads, mesh.ef2q, mesh.nfq2fq) = init_face_map(mesh, nQ)
 end
 
 """
-    init_face_map!(mesh::Mesh, efmap, nfmap, size1D)
+    init_face_map(mesh::Mesh, size1D)
 Initialize face maps for a given number of nodes.
 Assumes that each face is a side with exactly size1D nodes.
 For every element iK, face iF, face node iFN:
@@ -366,8 +365,8 @@ my node       @: `soln[efmap[iFN, iF], :, iK]`
 
 neighbor node @: `soln[efmap[nfmap[iFN], e2f[iF,iK]], :, e2e[iF,iK]]`
 """
-function init_face_map!(mesh::Mesh, efmap, nfmap, size1D)
-    efmap = Array{Float64,2}(undef, size1D, N_FACES)
+function init_face_map(mesh::Mesh, size1D)
+    efmap = Array{Int64,2}(undef, size1D, N_FACES)
     # efmap has explicit dependence on f2v. Only handles CCW vertices
     # 4---3
     # |   |
@@ -390,7 +389,7 @@ function init_face_map!(mesh::Mesh, efmap, nfmap, size1D)
             efmap[:,iF] = x_off.+y_off
         elseif mesh.f2v[:,iF] == [3,4]
             # +y direction face
-            y_off = size1D-1
+            y_off = (size1D-1)*size1D
             x_off = size1D:-1:1 # 1-indexed
             efmap[:,iF] = x_off.+y_off
         else
@@ -403,7 +402,7 @@ function init_face_map!(mesh::Mesh, efmap, nfmap, size1D)
 
     # Face of 2D mesh is 1D
     fnodes = size1D
-    return fnodes
+    return (fnodes,efmap,nfmap)
 end
 
 """

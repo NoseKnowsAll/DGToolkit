@@ -11,6 +11,8 @@ struct SolutionVector{T} <: AbstractVector{T}
     end
 end
 
+Base.similar(u::SolutionVector, ::Type{T}) where {T} = SolutionVector(Base.similar(u.data, T))
+
 """
     size(A::SolutionVector)
 Return a tuple containing the dimensions of underlying operator A
@@ -80,7 +82,7 @@ function lp_norm(u::SolutionVector, p::Real=2)
     (n,ns,ne) = true_size(u)
     lp_norms = zeros(ns)
     for iS = 1:ns
-        @views lp_norms[iS] += LinearAlgebra.norm(vec(u.data[:,iS,:]),p) 
+        @views lp_norms[iS] += LinearAlgebra.norm(vec(u.data[:,iS,:]),p)
     end
     return lp_norms
 end
