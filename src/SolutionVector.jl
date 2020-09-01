@@ -9,6 +9,10 @@ struct SolutionVector{T} <: AbstractVector{T}
     function SolutionVector(data::Array{T,3}) where {T}
         new{T}(data)
     end
+
+    function SolutionVector{T}(s1,s2,s3) where {T}
+        new{T}(Array{T,3}(undef, s1,s2,s3))
+    end
 end
 
 Base.similar(u::SolutionVector, ::Type{T}) where {T} = SolutionVector(Base.similar(u.data, T))
