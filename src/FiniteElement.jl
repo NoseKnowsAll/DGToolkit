@@ -260,16 +260,16 @@ Compute du = source(x,t) within element volumes
 """
 function source_term!(du, solver::Solver, t)
     JWI = Array{Float64,2}(undef, nQV(solver),dofsV(solver))
-    f = Array{Float64,2}(undef, nQV(solver),nstates(solver))
+    f = Array{Float64,2}(undef, nstates(solver),nQV(solver))
     for iK = 1:nelements(solver)
         # JWI = Diag(J)*Diag(w)*InterpV
         mul!(JWI, Diagonal(solver.wQV .* solver.mesh.Jkdet[:,iK]), solver.InterpV)
 
         for iQ = 1:nQV(solver)
-            source!(f[iQ,:], solver.app, t)
+            @views source!(f[:,iQ], solver.app, t)
         end
         # du[:,:,iK] = JWI'*f
-        @views mul!(du.data[:,:,iK], JWI', f)
+        @views mul!(du.data[:,:,iK], JWI', f')
     end
 end
 
