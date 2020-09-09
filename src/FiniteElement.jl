@@ -79,7 +79,7 @@ struct Solver
             dInterpV,dInterpF,InterpTk,InterpTkQ) =
             precompute_interpolation_matrices(order)
         # Update Mesh to know about solver information
-        Geometry.setup_nodes!(mesh,InterpTk,order)
+        Geometry.setup_nodes!(mesh,InterpTk,order,compute_global=true)
         Geometry.setup_quads!(mesh,InterpTkQ)
         Geometry.precompute_jacobians!(mesh,xTk1D,xQ1D)
         # Initialize work arrays
@@ -346,7 +346,7 @@ function convect_volume!(du, solver::Solver)
             # grad = op * fc'
             mul!(grad[:,:,iQ], op_q[:,:,iQ], fc[:,:,iQ]')
         end
-        # du += dInterpV'*grad
+        # du += dInterpV'*grad'
         @views mul!(du.data[:,:,iK], solver.dInterpV[:,:,1]', grad[1,:,:]', 1.0, 1.0)
         @views mul!(du.data[:,:,iK], solver.dInterpV[:,:,2]', grad[2,:,:]', 1.0, 1.0)
     end

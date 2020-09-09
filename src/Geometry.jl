@@ -75,13 +75,13 @@ mutable struct Mesh
     """
     True coordinates of DG nodes for every element
 
-    For every element iK, node i, `global_coords[:,i,iK]` = ND coordinate of node i
+    For every element iK, node i, `coord_nodes[:,i,iK]` = ND coordinate of node i
     """
     coord_nodes
     """
     True coordinates of DG quadrature points for every element
 
-    For every element iK, quad point i, `global_quads[:,i,iK]` = ND
+    For every element iK, quad point i, `coord_quads[:,i,iK]` = ND
     coordinate of quad point i
     """
     coord_quads
