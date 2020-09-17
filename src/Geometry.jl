@@ -11,7 +11,7 @@ import Basis2D.dPhi2D
 export Mesh
 export periodic_square
 export setup_nodes!, setup_quads!
-export precompute_jacobians!
+export precompute_jacobians!, precompute_ldg_switch!
 export output_mesh
 
 " Dimension of overall mesh "
@@ -147,10 +147,17 @@ mutable struct Mesh
     Neighbor quad: `solution[nfq2fq[iFQ], e2f[iF,iK], :, e2e[iF,iK]]`
     """
     nfq2fq
+    """
+    Local DG switch (only needed for 2nd-order applications):
+
+    For every element iK, face iF, `ldg_switch[iF,iK]` = true if ldg flux
+    should be taken from this element's face values
+    """
+    ldg_switch
 
     function Mesh(ne_, nv_, mdx_, v_, e2v_, f2v_, e2e_, e2f_, normals_, bm_)
         return new(ne_, nv_, mdx_, v_, e2v_, f2v_, e2e_, e2f_, normals_, bm_,
-            0,0,0,0,0,[],[],[],[],[],[],[],[],[],[])
+            0,0,0,0,0,[],[],[],[],[],[],[],[],[],[],[])
     end
 end
 
@@ -492,6 +499,66 @@ function precompute_jacobians!(mesh::Mesh, xTk1D, xQ1D)
             end
             for iQ = 1:mesh.n_face_quads
                 mesh.JkFdet[iQ,iF,iK] = norm(mesh.JkF[:,lj,iQ,iF,iK],2)
+            end
+        end
+    end
+end
+
+"""
+    function precompute_ldg_switch!(mesh::Mesh)
+Precompute the Local DG switch for 2nd-order applications. Opposite faces of
+each element are guaranteed to have opposing switch values.
+"""
+function precompute_ldg_switch!(mesh::Mesh)
+    # Initialize opposite_face array
+    opposite_face = zeros(Int64,Geometry.N_FACES)
+    for iF = 1:Geometry.N_FACES
+        for iF2 = 1:Geometry.N_FACES
+            # Opposite faces share no common vertices
+            if isempty(intersect(mesh.f2v[:,iF],mesh.f2v[:,iF2]))
+                opposite_face[iF] = iF2
+                break
+            end
+        end
+    end
+
+    visited = falses(Geometry.N_FACES, mesh.n_elements)
+    mesh.ldg_switch = zeros(Int64, Geometry.N_FACES, mesh.n_elements)
+    while true
+        index = findfirst(x -> !x, visited)
+        if isnothing(index)
+            break
+        end
+        iF = index[1]; iK = index[2];
+        init_iF = iF; init_iK = iK
+        choose_this_element = true
+        while true
+            mesh.ldg_switch[iF,iK] = choose_this_element
+            visited[iF,iK] = true
+            nK = mesh.e2e[iF,iK]
+            if nK < 0 # Boundary
+                if choose_this_element # Now reverse direction from initial choice
+                    choose_this_element = !choose_this_element
+                    iK = init_iK
+                    iF = opposite_face[init_iF]
+                else # We have already reversed once
+                    break
+                end
+            else # Inter-element border
+                nF = mesh.e2f[iF,iK]
+                mesh.ldg_switch[nF,nK] = !choose_this_element
+                visited[nF,nK] = true
+                iK = nK
+                iF = opposite_face[nF]
+                if visited[iF,iK]
+                    if choose_this_element # Now reverse direction from initial choice
+                        choose_this_element = !choose_this_element
+                        iK = init_iK
+                        iF = opposite_face[init_iF]
+                    else # We have already reversed once
+                        break
+                    end
+                end
             end
         end
     end
