@@ -186,8 +186,36 @@ function (*)(A::LocalMatrix{T1}, x::AbstractVector{T2}) where {T1, T2}
     return b
 end
 
+"""
+    mul!(y::SolutionVector, A::LocalMatrix, x::SolutionVector, α::Number, β::Number)
+Return A x α + y β by overwriting y
+"""
+function LinearAlgebra.mul!(y::SolutionVector, A::LocalMatrix, x::SolutionVector, α::Number, β::Number)
+    (ma,na,nsa,nea) = size(A.data)
+    (nx,nsx,nex) = size(x.data)
+    (ny,nsy,ney) = size(y.data)
+    @assert ma == ny && na == nx && nea == nex == ney
+    if nsa == nsx == nsy
+        y.data .*= β
+        for iK = 1:nea
+            for iS = 1:nsa
+                @inbounds @views y.data[:,iS,iK] += α*A.data[:,:,iS,iK]*x.data[:,iS,iK]
+            end
+        end
+    elseif nsa == 1 && nsx == nsy
+        y.data .*= β
+        for iK = 1:nea
+            for iS = 1:nsx
+                @inbounds @views y.data[:,iS,iK] += α*A.data[:,:,1,iK]*x.data[:,iS,iK]
+            end
+        end
+    else
+        throw(DimensionMismatch("Local matrix A $(size(A.data)), SolutionVector x $(size(x.data)) and y $(size(y.data))"))
+    end
+    return y
+end
+
 function (*)(A::LocalMatrix{T1}, x::SolutionVector{T2}) where {T1, T2}
-    #println("my *2")
     (m,n,ns,ne) = size(A.data)
     (nx,nsx,nex) = size(x.data)
     @assert n == nx && ne == nex
