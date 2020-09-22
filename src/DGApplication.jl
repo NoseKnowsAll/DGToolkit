@@ -7,8 +7,9 @@ export Application
 export Convection, ConvectionDiffusion, NavierStokes, ElasticWave
 # Functions
 export is_second_order, nstates
-export flux_c!, flux_d!
+export flux_c!, flux_d!, flux_l!
 export numerical_flux_c!, boundary_flux_c!
+export numerical_flux_l!
 export source!
 
 
@@ -43,6 +44,12 @@ Default: f_d(u,∇u) = 0.0
 """
 flux_d!(flux, app::Application{N}, u, Du) where {N} = (flux .= zeros(typeof(u[1]),nstates(app),N))
 """
+    flux_l!(flux, app::Application, u)
+Computes the local DG flux function for the given application.
+Default: f_l(u) = u
+"""
+flux_l!(flux, app::Application{N}, u) where {N} = (flux .= deepcopy(u))
+"""
     numerical_flux_c!(flux, app::Application, uK, uN, normal_k)
 Given the state vector at this element (uK) and its neighbor (uN), compute the
 convection numerical flux function for this PDE dotted with the normal, and
@@ -67,6 +74,20 @@ Default: f(u)*n = 0.0 (Homogeneous Dirichlet BC)
 """
 function boundary_flux_c!(flux, app::Application, u, bc, normal_k)
     flux .= zeros(typeof(u[1]),nstates(app))
+end
+"""
+    function numerical_flux_l!(flux, app::Application, uK, uN, switch, normal_k)
+Compute the numerical local DG flux function dotted with n for this PDE. Note
+that there is a different local DG flux depending on the gradient directions.
+Therefore, normal_k is only normal in the direction we care about.
+Default: f(u)*n = f(uK)*n or f(uN)*n based on mesh's Local DG switch
+"""
+function numerical_flux_l!(flux, app::Application{N}, uK, uN, switch, normal_k) where {N}
+    flux_k = similar(uK)
+    flux_l!(flux_k, app, uK)
+    flux_n = similar(uN)
+    flux_l!(flux_n, app, uN)
+    flux .= (switch ? flux_k : flux_n)*normal_k
 end
 """
     source!(s_val, app::Application, t=0.0, x=0.0)

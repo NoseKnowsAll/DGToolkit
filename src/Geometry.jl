@@ -523,7 +523,7 @@ function precompute_ldg_switch!(mesh::Mesh)
     end
 
     visited = falses(Geometry.N_FACES, mesh.n_elements)
-    mesh.ldg_switch = zeros(Int64, Geometry.N_FACES, mesh.n_elements)
+    mesh.ldg_switch = zeros(Bool, Geometry.N_FACES, mesh.n_elements)
     while true
         index = findfirst(x -> !x, visited)
         if isnothing(index)
