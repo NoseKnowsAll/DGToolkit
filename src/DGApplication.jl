@@ -9,6 +9,7 @@ export Convection, ConvectionDiffusion, NavierStokes, ElasticWave
 export is_second_order, nstates
 export flux_c!, flux_d!, flux_l!
 export numerical_flux_c!, boundary_flux_c!
+export numerical_flux_d!
 export numerical_flux_l!
 export source!
 
@@ -79,7 +80,7 @@ end
     function numerical_flux_l!(flux, app::Application, uK, uN, switch, normal_k)
 Compute the numerical local DG flux function dotted with n for this PDE. Note
 that there is a different local DG flux depending on the gradient directions.
-Therefore, normal_k is only normal in the direction we care about.
+Therefore, normal_k is actually only the normal in the direction we care about.
 Default: f(u)*n = f(uK)*n or f(uN)*n based on mesh's Local DG switch
 """
 function numerical_flux_l!(flux, app::Application{N}, uK, uN, switch, normal_k) where {N}
@@ -88,6 +89,22 @@ function numerical_flux_l!(flux, app::Application{N}, uK, uN, switch, normal_k) 
     flux_n = similar(uN)
     flux_l!(flux_n, app, uN)
     flux .= (switch ? flux_k : flux_n)*normal_k
+end
+
+"""
+    function numerical_flux_d!(flux, app::Application, uK,uN, DuK,DuN, switch, normal_k)
+Compute the numerical diffusive (viscous) flux dotted with n for this PDE.
+Default: f(uK,uN,DuK,DuN) = -f_d(uK, !ldg_switch(DuK,DuN))*n
+"""
+function numerical_flux_d!(flux, app::Application{N}, uK,uN, DuK,DuN, switch, normal_k) where {N}
+    fluxes = similar(DuK)
+    if !switch # Negative ldg switch for choosing DuK or DuN
+        flux_d!(fluxes, app, uK, DuK)
+    else
+        flux_d!(fluxes, app, uK, DuN)
+    end
+    # flux = -fluxes*n
+    LinearAlgebra.mul!(flux, fluxes, normal_k, -1.0, 0.0)
 end
 """
     source!(s_val, app::Application, t=0.0, x=0.0)
