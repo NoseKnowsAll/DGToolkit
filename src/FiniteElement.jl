@@ -347,7 +347,10 @@ function local_flux!(solver::Solver)
                 normalK = solver.mesh.normals[l,iF,iK]
 
                 if nK < 0 # Boundary condition
-                    # TODO: figure out BCs for local DG flux
+                    for iFQ = 1:nQF(solver)
+                        uK .= solver.u_interpF[iFQ,:,iF,iK]
+                        @views boundary_flux_l!(fstar[:,iFQ], solver.app, uK, nK, normalK)
+                    end
                 else # Inter-element flux_l
                     nF = solver.mesh.e2f[iF,iK]
                     for iFQ = 1:nQF(solver)

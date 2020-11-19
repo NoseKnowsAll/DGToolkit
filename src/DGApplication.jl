@@ -8,8 +8,8 @@ export Application
 export is_second_order, nstates
 export flux_c!, flux_d!, flux_l!
 export numerical_flux_c!, boundary_flux_c!
-export numerical_flux_d!
-export numerical_flux_l!
+export numerical_flux_d!, boundary_flux_d!
+export numerical_flux_l!, boundary_flux_l!
 export source!
 
 
@@ -110,7 +110,6 @@ function boundary_flux_l!(flux, app::Application{N}, u, bc, normal_k) where {N}
     end
     flux .= flux_k*normal_k
 end
-
 """
     function numerical_flux_d!(flux, app::Application, uK,uN, DuK,DuN, switch, normal_k)
 Compute the numerical diffusive (viscous) flux dotted with n for this PDE.
@@ -125,6 +124,15 @@ function numerical_flux_d!(flux, app::Application{N}, uK,uN, DuK,DuN, switch, no
     end
     # flux = -fluxes*n
     LinearAlgebra.mul!(flux, fluxes, normal_k, -1.0, 0.0)
+end
+"""
+    function boundary_flux_d!(flux, app::Application{N}, u,Du,bc, normal_k)
+Compute the numerical diffusive (viscous) flux dotted with n for this PDE at a
+boundary.
+Default: f(u,Du)*n = 0.0 (Homogeneous Neumann BC)
+"""
+function boundary_flux_d!(flux, app::Application{N}, u,Du,bc, normal_k)
+    flux .= zeros(typeof(Du[1]),size(Du)...)
 end
 """
     source!(s_val, app::Application, t=0.0, x=0.0)
