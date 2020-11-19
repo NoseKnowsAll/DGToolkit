@@ -131,7 +131,7 @@ Compute the numerical diffusive (viscous) flux dotted with n for this PDE at a
 boundary.
 Default: f(u,Du)*n = 0.0 (Homogeneous Neumann BC)
 """
-function boundary_flux_d!(flux, app::Application{N}, u,Du,bc, normal_k)
+function boundary_flux_d!(flux, app::Application{N}, u,Du,bc, normal_k) where {N}
     flux .= zeros(typeof(Du[1]),size(Du)...)
 end
 """
