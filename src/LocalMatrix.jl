@@ -27,17 +27,18 @@ function Base.size(A::LocalMatrix)
 end
 
 """
-    getindex(A::LocalMatrix{T}, i::Integer)
-Linear scalar indexing into array
+    getindex(A::LocalMatrix, i::Integer)
+Linear scalar indexing into LocalMatrix
 """
 @inline function Base.getindex(A::LocalMatrix, i::Integer)
-    @boundscheck checkbounds(A.data, i)
-    return A.data[i]
+    (m,n,ns,ne) = size(A.data)
+    j = rem1(i, m*ns*ne); i = div(i, m*ns*ne, RoundUp)
+    return getindex(A,i,j)
 end
 
 """
     getindex(A::LocalMatrix{T}, i::Integer, j::Integer)
-2-dimensional scalar indexing into array
+2-dimensional scalar indexing into LocalMatrix
 """
 @inline function Base.getindex(A::LocalMatrix{T}, i::Integer, j::Integer) where {T}
     @boundscheck checkbounds(Bool, A,i,j)
@@ -244,7 +245,7 @@ Explicitly compute the block-diagonal full LU factorizations of A
 """
 function factorize!(A::LocalMatrix)
     (m,n,ns,ne) = size(A.data)
-    @assert m == n
+    @assert m == n "Block diagonals of LocalMatrix must be square!"
     for iK = 1:ne
         for iS = 1:ns
             A.factorizations[iS,iK] = LinearAlgebra.lu(A.data[:,:,iS,iK])

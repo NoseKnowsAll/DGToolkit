@@ -11,6 +11,7 @@ import Base: getindex, setindex!, size
 export
     # Types
     LocalMatrix,
+    JacobianMatrix,
     SolutionVector,
     # Functions
     L2_error!,
