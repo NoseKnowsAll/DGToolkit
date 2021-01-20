@@ -118,8 +118,8 @@ mutable struct Mesh
     """
     Element face to node mapping
 
-    For every face iF (same mapping across all elements), `ef2n[:,iF]` = local
-    node IDs of nodes on face iF
+    For every face iF (same mapping across all elements), face node iFN,
+    `ef2n[iFN,iF]` = local node ID of face node iFN on face iF
     """
     ef2n
     """
@@ -134,8 +134,8 @@ mutable struct Mesh
     """
     Element face to quadrature point mapping
 
-    For every face iF (same mapping across all elements), `ef2q[:,iF]` = local
-    quad IDs of quadrature points on face iF
+    For every face iF (same mapping across all elements), face quad iFQ,
+    `ef2q[iFQ,iF]` = local quad ID of face quad iFQ on face iF
     """
     ef2q
     """
