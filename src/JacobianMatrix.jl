@@ -4,15 +4,20 @@ import Geometry
     struct JacobianMatrix{T} <: AbstractMatrix{T}
 Jacobian matrix. Block-diagonal local matrix represents intraelement operations,
 off-diagonal represents connectivity between elements.
+
 `diag[:,iS1,:,iS2,iK]` is a square matrix d(f(u[:,iS1,iK))/d(u[:,iS2,iK])
 for states iS1, iS2, element iK. Designed so that `diag[:,:,:,:,iK]` can be
 in-place reshaped for matrix multiplication.
-`offdiag[iN1,iS1,iFN2,iS2,iF,iK1]` is a rectangular matrix
+
+`offdiag[iFN2,iS2,iN1,iS1,iF,iK1]` is a rectangular matrix
 d(f(u[iN1,iS1,iK1])/d(u[iFN2,iS2,mesh.e2e[iF,iK1]]), or effect of neighbor iF on
 element iK1. Again, can in-place reshape for matrix multiplication. Note that
 for upper triangular portion of global matrix (`mesh.e2e[iF,iK1]<iK1`),
 the matrix `offdiag[:,:,:,:,iF,iK1]` actually yields the transpose of
-operator needed; this format needs only one array for all off-diagonals.
+operator needed. That is, the lower triangular part represents the effect of
+neighbor on face nodes of iK1, and the upper triangular part represents the
+transpose of the effect of neighbor's face nodes on iK1. This format therefore
+only needs one array to store all off-diagonals.
 """
 struct JacobianMatrix{T} <: AbstractMatrix{T}
     diag::Array{T,5}
@@ -65,7 +70,7 @@ end
     elseif je ∈ A.mesh.e2e[:,ie]
         iF = findfirst(x->x==je,A.mesh.e2e[:,ie])
         if je < ie
-            # Lower triangular part stored transposed
+            # Lower triangular part stored directly
             iFN2 = findfirst(x->x==jn,A.mesh.ef2n[:,iF])
             iFN = 0
             if !isnothing(iFN2)
@@ -75,9 +80,9 @@ end
                 # Node is not on the face => no Jacobian dependence
                 return zero(T)
             end
-            return A.offdiag[jn,js,iFN,is,iF,ie]
+            return A.offdiag[iFN,is,jn,js,iF,ie]
         else
-            # Upper triangular part stored directly
+            # Upper triangular part stored transposed
             iFN = findfirst(x->x==im,A.mesh.ef2n[:,iF])
             iFN2 = 0
             if !isnothing(iFN)
@@ -87,7 +92,7 @@ end
                 # Node is not on the face => no Jacobian dependence
                 return zero(T)
             end
-            return A.offdiag[im,is,iFN2,js,iF,ie]
+            return A.offdiag[iFN2,js,im,is,iF,ie]
         end
     else
         # Non-neighboring elements => no Jacobian dependence
@@ -124,7 +129,7 @@ end
     elseif je ∈ A.mesh.e2e[:,ie]
         iF = findfirst(x->x==je,A.mesh.e2e[:,ie])
         if je < ie
-            # Lower triangular part stored transposed
+            # Lower triangular part stored directly
             iFN2 = findfirst(x->x==jn,A.mesh.ef2n[:,iF])
             iFN = 0
             if !isnothing(iFN2)
@@ -138,9 +143,9 @@ end
                     return v
                 end
             end
-            return setindex!(A.offdiag, v, jn,js,iFN,is,iF,ie)
+            return setindex!(A.offdiag, v, iFN,is,jn,js,iF,ie)
         else
-            # Upper triangular part stored directly
+            # Upper triangular part stored transposed
             iFN = findfirst(x->x==im,A.mesh.ef2n[:,iF])
             iFN2 = 0
             if !isnothing(iFN)
@@ -154,7 +159,7 @@ end
                     return v
                 end
             end
-            return setindex!(A.offdiag, v, im,is,iFN2,js,iF,ie)
+            return setindex!(A.offdiag, v, iFN2,js,im,is,iF,ie)
         end
     else
         # Non-neighboring elements => no Jacobian dependence
@@ -182,28 +187,54 @@ end
 (/)(A::JacobianMatrix, c::Number) = JacobianMatrix(A.diag / c, A.offdiag / c, A.mesh)
 (*)(A::JacobianMatrix, B::JacobianMatrix) = error("Too expensive an operation!")
 
+" Store `faces` on `volume` array according to given mask: vol[mask] += face "
+function distribute_face_to_nodes!(volume, faces, mask)
+    volume_shaped = reshape(volume, size(volume,1), prod(size(volume)[2:end])))
+    faces_shaped = reshape(faces, size(faces,1), prod(size(faces)[2:end]))
+    for j = 1:size(volume_shaped,2)
+        for i = 1:size(mask,1)
+            volume_shaped[mask[i],j] += faces_shaped[i,j]
+        end
+    end
+end
+" Collect `volume` into `faces` array according to given mask: face = vol[mask] "
+function collect_face_from_nodes!(faces, volume, mask)
+    volume_shaped = reshape(volume, size(volume,1), prod(size(volume)[2:end])))
+    faces_shaped = reshape(faces, size(faces,1), prod(size(faces)[2:end]))
+    for j = 1:size(volume_shaped,2)
+        for i = 1:size(mask,1)
+            faces_shaped[i,j] = volume_shaped[mask[i],j]
+        end
+    end
+end
+
 function (*)(A::JacobianMatrix{T1}, x::AbstractVector{T2}) where {T1, T2}
     (m,ns,n,ns2,ne) = size(A.diag)
     b = zeros(typeof(zero(T1)*zero(T2)), m*ns*ne)
-    b_shaped = reshape(b, m*ns,ne)
-    x_shaped = reshape(x, n*ns2,ne)
+    b_shaped = reshape(b, m,ns,ne)
+    b_mult   = reshape(b, m*ns,ne)
+    x_shaped = reshape(x, n,ns2,ne)
+    x_mult   = reshape(x, n*ns2,ne)
+    faces_mult = zeros(typeof(zero(T1)*zero(T2)), A.mesh.n_face_nodes*ns)
+    faces_shaped = reshape(faces, A.mesh.n_face_nodes, ns)
     for iK = 1:ne
         # Diagonal of A
-        @views Adiag = reshape(A.diag[:,:,:,:,iK])
-        @views b_shaped[:,iK] += Adiag*x_shaped[:,iK]
+        @views Adiag = reshape(A.diag[:,:,:,:,iK], m*ns, n*ns2)
+        @views b_mult[:,iK] .+= Adiag*x_mult[:,iK]
         # Off-diagonal of A
-        # TODO: Everything below is completely unfinished
         for iF = 1:Geometry.N_FACES
             nK = A.mesh.e2e[iF,iK]
             if nK > 0
+                Aoff = reshape(@view A.offdiag[:,:,:,:,iF,iK], A.mesh.n_faces_nodes*ns,m*ns)
+                nF = A.mesh.e2f[iF,iK]
                 if nK < iK
-                    for iS2 = 1:ns2
-                        for iS = 1:ns
-                            @views b_shaped[:,iS,iK] += A.offdiag[:,:]TODO
-                        end
-                    end
+                    # Lower triangular part stored directly
+                    @views faces_mult .= Aoff*x_mult[:,iK]
+                    @views distribute_face_to_nodes!(b_shaped[:,:,iK], faces_shaped, A.mesh.ef2n[:,iF])
                 else
-
+                    # Upper triangular part stored transposed
+                    @views collect_face_from_nodes!(faces_shaped, x_shaped[:,:,nK], A.mesh.ef2n[:,nF])
+                    @views b_mult[:,iK] .+= Aoff'*faces_mult
                 end
             end
         end
