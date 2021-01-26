@@ -241,3 +241,115 @@ function (*)(A::JacobianMatrix{T1}, x::AbstractVector{T2}) where {T1, T2}
     end
     return b
 end
+function (*)(A::JacobianMatrix{T1}, x::SolutionVector{T2}) where {T1, T2}
+    (m,ns,n,ns2,ne) = size(A.diag)
+    b_shaped = zeros(typeof(zero(T1)*zero(T2)), m,ns,ne)
+    b_mult = reshape(b, m*ns,ne)
+    x_mult = reshape(x.data, n*ns2,ne)
+    faces_mult = zeros(typeof(zero(T1)*zero(T2)), A.mesh.n_face_nodes*ns)
+    faces_shaped = reshape(faces, A.mesh.n_face_nodes, ns)
+    @views for iK = 1:ne
+        # Diagonal of A
+        Adiag = reshape(A.diag[:,:,:,:,iK], m*ns, n*ns2)
+        b_mult[:,iK] .+= Adiag*x_mult[:,iK]
+        # Off-diagonal of A
+        for iF = 1:Geometry.N_FACES
+            nK = A.mesh.e2e[iF,iK]
+            if nK > 0
+                Aoff = reshape(A.offdiag[:,:,:,:,iF,iK], A.mesh.n_faces_nodes*ns,m*ns)
+                nF = A.mesh.e2f[iF,iK]
+                if nK < iK
+                    # Lower triangular part stored directly
+                    faces_mult .= Aoff*x_mult[:,iK]
+                    distribute_face_to_nodes!(b_shaped[:,:,iK], faces_shaped, A.mesh.ef2n[:,iF])
+                else
+                    # Upper triangular part stored transposed
+                    collect_face_from_nodes!(faces_shaped, x.data[:,:,nK], A.mesh.ef2n[:,nF])
+                    b_mult[:,iK] .+= Aoff'*faces_mult
+                end
+            end
+        end
+    end
+    return SolutionVector(b_shaped)
+end
+"""
+    mul!(y::SolutionVector, A::JacobianMatrix, x::SolutionVector, α::Number, β::Number)
+Return A x α + y β by overwriting y
+"""
+function LinearAlgebra.mul!(y::SolutionVector{T1}, A::JacobianMatrix, x::SolutionVector, α::Number, β::Number) where {T1}
+    (m,ns,n,ns2,ne) = size(A.diag)
+    (nx,ns2x,nex) = true_size(x)
+    (my,nsy,ney) = true_size(y)
+    @assert m == my && ns  == nsy  && ne == ney "JacobianMatrix $(size(A.diag)), SolutionVector $(true_size(y)) mismatched size"
+    @assert n == nx && ns2 == ns2x && ne == nex "JacobianMatrix $(size(A.diag)), SolutionVector $(true_size(x)) mismatched size"
+    y_shaped = reshape(y.data, m*ns*ne)
+    y_mult   = reshape(y.data, m*ns,ne)
+    x_shaped = reshape(x.data, n,ns2,ne)
+    x_mult   = reshape(x.data, n*ns2,ne)
+    faces_mult = zeros(T1, A.mesh.n_face_nodes*ns)
+    faces_shaped = reshape(faces, A.mesh.n_face_nodes, ns)
+    @views for iK = 1:ne
+        # Diagonal of A
+        Adiag = reshape(A.diag[:,:,:,:,iK], m*ns, n*ns2)
+        # y[iK] = Adiag*x[iK]*α + y[iK]*β
+        mul!(y_mult[:,iK], Adiag, x_mult[:,iK], α, β)
+        # Off-diagonal of A
+        for iF = 1:Geometry.N_FACES
+            nK = A.mesh.e2e[iF,iK]
+            if nK > 0
+                Aoff = reshape(A.offdiag[:,:,:,:,iF,iK], A.mesh.n_faces_nodes*ns,m*ns)
+                nF = A.mesh.e2f[iF,iK]
+                if nK < iK
+                    # Lower triangular part stored directly
+                    faces_mult .= Aoff*x_mult[:,iK]
+                    # y[iK] += Aoff*faces[iK]*α
+                    distribute_face_to_nodes!(y_shaped[:,:,iK], faces_shaped, A.mesh.ef2n[:,iF])
+                else
+                    # Upper triangular part stored transposed
+                    collect_face_from_nodes!(faces_shaped, x_shaped[:,:,nK], A.mesh.ef2n[:,nF])
+                    # y[iK] += Aoff'*faces[nK]*α
+                    mul!(y_mult[:,iK], Aoff', faces_mult, α, 1.0)
+                end
+            end
+        end
+    end
+end
+
+"""
+    ldiv!(A::JacobianMatrix, x::SolutionVector)
+In-place linear solve A\\x using numerical iterative solver based on
+preconditioned GMRES.
+TODO: Decide actual algorithm and create production-level version of code.
+"""
+function LinearAlgebra.ldiv!(A::JacobianMatrix, x::SolutionVector)
+    println("my ldiv!")
+    (m,ns,n,ns2,ne) = size(A.diag)
+    (nx,ns2x,nex) = true_size(x)
+    @assert nx == m == n && ns2x == ns2 == ns && ne == nex "JacobianMatrix A $(size(A.diag)) cannot \\ x $(true_size(x))"
+    # TODO: program the solver here
+    error("Not yet programmed!")
+end
+function \(A::LocalMatrix, x::SolutionVector)
+    println("my \\")
+    (m,ns,n,ns2,ne) = size(A.diag)
+    (nx,ns2x,nex) = true_size(x)
+    @assert nx == m == n && ns2x == ns2 == ns && ne == nex "JacobianMatrix A $(size(A.diag)) cannot \\ x $(true_size(x))"
+    b = deepcopy(x)
+    LinearAlgebra.ldiv!(A, b)
+end
+
+function L2_error!(u::SolutionVector, u_true::SolutionVector, M::JacobianMatrix)
+    u_true -= u
+    return L2_norm(u_true, M)
+end
+function L2_norm(u::SolutionVector, M::JacobianMatrix)
+    Mu = M*u
+    (n,ns,ne) = true_size(Mu)
+    l2_norms = zeros(ns)
+    for iK = 1:ne
+        for iS = 1:ns
+            @views l2_norms[iS] += u.data[:,iS,iK]'*Mu.data[:,iS,iK]
+        end
+    end
+    return l2_norms
+end
