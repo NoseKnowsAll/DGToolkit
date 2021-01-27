@@ -558,4 +558,6 @@ function diffusive_volume!(du, solver::Solver)
     end
 end
 
-end
+include("FEImplicit.jl")
+
+end # module FiniteElement
